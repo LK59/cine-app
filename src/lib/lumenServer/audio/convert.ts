@@ -143,7 +143,7 @@ export interface ConvertJob {
    */
   pool?: FfmpegPool;
   /**
-   * « Améliorer les dialogues » (§191) : le traitement entre le décodeur et l'encodeur, chaque segment à part
+   * « Améliorer les dialogues » (§193) : le traitement entre le décodeur et l'encodeur, chaque segment à part
    * (`convertDialogueRange`). Jamais par le pool.
    */
   dialogue?: DialogueRun;
@@ -228,7 +228,7 @@ export async function convertRange(job: ConvertJob): Promise<{ segments: Map<num
   return { segments, facts: { feedMs, diskMs, ffmpegMs: run.ms, inputBytes, frames: w.b - w.a, silent: !feed, firstByteMs: run.firstByteMs, pooled: !!job.pool } };
 }
 
-// ── « Améliorer les dialogues » (§191) ───────────────────────────────────────
+// ── « Améliorer les dialogues » (§193) ───────────────────────────────────────
 
 /**
  * Un décodage partagé par les segments d'une tâche donne-t-il, à chaque segment, le PCM qu'il aurait seul ? Oui quand

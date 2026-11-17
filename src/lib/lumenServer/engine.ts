@@ -97,7 +97,7 @@ export class LumenEngine {
   }
 
   init(index: LumenIndex, rendition: LumenRendition): Uint8Array {
-    // Un rendu « dialogues » (§191) : l'init de sa cible, posée par la vue (`withDialogue`).
+    // Un rendu « dialogues » (§193) : l'init de sa cible, posée par la vue (`withDialogue`).
     if (rendition.kind === "audio" && rendition.dialogue) {
       const d = index.audio.find((a) => a.number === rendition.track)?.dialogue;
       if (!d || d.cids[rendition.dialogue] !== rendition.conv) throw new LumenError("piste-inconnue", "Pas d'init pour ce rendu.");
@@ -110,7 +110,7 @@ export class LumenEngine {
 
   /** Les octets du segment `n`, construits par la file. */
   async segment(index: LumenIndex, rendition: LumenRendition, n: number): Promise<SegmentResult & { cost: ReadCost }> {
-    // Un rendu « dialogues » ne se construit pas ici (`lumenSegment` le donne à la conversion, §191) : jamais les
+    // Un rendu « dialogues » ne se construit pas ici (`lumenSegment` le donne à la conversion, §193) : jamais les
     // octets de la copie sous son nom.
     if (rendition.kind === "audio" && rendition.dialogue) throw new LumenError("piste-inconnue", "Rendu « dialogues » : pas par le remux.");
     const spec = segmentSpec(index, rendition, n);
@@ -132,7 +132,7 @@ export class LumenEngine {
 
   private served(index: LumenIndex, rendition: LumenRendition): boolean {
     if (rendition.kind === "video") return !!index.video && index.segments.length > 0;
-    // Un rendu « dialogues » (§191) : sous l'identité actuelle de son traitement seulement — une autre (autre ffmpeg,
+    // Un rendu « dialogues » (§193) : sous l'identité actuelle de son traitement seulement — une autre (autre ffmpeg,
     // autre règle, autre moteur JavaScript) ne désigne plus rien (410).
     if (rendition.dialogue) {
       const mode = rendition.dialogue;

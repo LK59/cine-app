@@ -104,7 +104,7 @@ export async function prepareLumen(itemId: string, controller: AbortController, 
     const res = await fetch(`/api/lumen/${itemId}/prepare`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // « Améliorer les dialogues » allumé sur l'appareil (§191) : le segment de reprise du rendu traité par le serveur.
+      // « Améliorer les dialogues » allumé sur l'appareil (§193) : le segment de reprise du rendu traité par le serveur.
       body: JSON.stringify(dialogue === "off" ? { position } : { position, dialogue }),
       signal: controller.signal,
     });

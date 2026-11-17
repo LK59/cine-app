@@ -64,7 +64,7 @@ describe("lumenWanted — chaque condition", () => {
     expect(lumenWanted({ itemId: "a" }, { ...on, declined: (id) => id === "a" })).toBe(false);
     expect(lumenWanted({ itemId: "b" }, { ...on, declined: (id) => id === "a" })).toBe(true);
   });
-  it("« Améliorer les dialogues » allumé sur l'appareil ne décline plus ce chemin (§191) : le serveur traite le son, ou l'hôte rend la main", () => {
+  it("« Améliorer les dialogues » allumé sur l'appareil ne décline plus ce chemin (§193) : le serveur traite le son, ou l'hôte rend la main", () => {
     localStorage.setItem("cine-dialogue", "strong");
     expect(lumenWanted({ itemId: "a" }, on)).toBe(true);
     localStorage.setItem("cine-dialogue", "on");

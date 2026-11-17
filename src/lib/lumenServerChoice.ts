@@ -144,7 +144,7 @@ export function lumenWanted(
 ): boolean {
   if (!probe.option) return false;
   if (session.bench || session.labSample || session.offline) return false;
-  // « Améliorer les dialogues » allumé sur l'appareil ne décline plus ce chemin (§191, après §188) : le serveur traite le
+  // « Améliorer les dialogues » allumé sur l'appareil ne décline plus ce chemin (§193, après §188) : le serveur traite le
   // son lui-même quand il le peut ; sinon l'hôte le sait par le verdict et rend la lecture au lecteur actuel.
   if ((probe.declined ?? lumenDeclined)(session.itemId)) return false;
   if ((probe.mediaSourceServed ?? pageServedMediaSource)()) return false;

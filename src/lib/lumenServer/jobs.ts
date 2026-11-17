@@ -20,7 +20,7 @@ export type LumenJob =
   | { type: "index"; path: string; targetUs?: number; cut?: LumenCutMode }
   | { type: "segment"; spec: SegmentSpec }
   | { type: "audio-feed"; spec: AudioFeedSpec }
-  /** « Améliorer les dialogues » (§191) : `DialogueEnhancer` sur chaque segment d'une tâche — du calcul, aucun fichier. */
+  /** « Améliorer les dialogues » (§193) : `DialogueEnhancer` sur chaque segment d'une tâche — du calcul, aucun fichier. */
   | { type: "dialogue"; work: DialogueWork };
 
 export interface ReadCost {
@@ -100,7 +100,7 @@ export function ownBuffer(view: ArrayBufferView): ArrayBuffer | null {
 }
 
 /**
- * Les tampons d'une demande, transférés plutôt que copiés : le PCM d'une tâche « dialogues » (§191), des dizaines de
+ * Les tampons d'une demande, transférés plutôt que copiés : le PCM d'une tâche « dialogues » (§193), des dizaines de
  * Mo décodés par ffmpeg, n'a plus d'usage sur le fil principal une fois donné.
  */
 export function requestTransferablesOf(job: LumenJob): ArrayBuffer[] {

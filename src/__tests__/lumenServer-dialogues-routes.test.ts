@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import { NextRequest } from "next/server";
 import { FIXTURES, fixtureIndex, parseFragments } from "./lumenServer-helpers";
 
-// « Améliorer les dialogues » derrière les routes de Lumen serveur (DECISIONS.md §191), sans ffmpeg : la détection et
+// « Améliorer les dialogues » derrière les routes de Lumen serveur (DECISIONS.md §193), sans ffmpeg : la détection et
 // la conversion sont des doubles (la vraie, traitement compris, est éprouvée par `lumen-dialogue-bench.spec.ts`).
 // Vérifié ici : l'option coupée ne change rien (le verdict dit pourquoi le traitement n'est pas servi) ; ouverte, le
 // verdict donne la liste maître `&dialogue=`, qui sert chaque piste par son rendu traité ; l'init et les segments de ces

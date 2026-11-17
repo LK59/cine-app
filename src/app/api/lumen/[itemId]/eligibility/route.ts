@@ -42,7 +42,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (cut === null) return goneResponse("lumen-inconnu", "Découpe inconnue");
   const targetUs = parseTargetSeconds(q.get("target"));
   if (targetUs === null) return goneResponse("lumen-inconnu", "Cible inconnue");
-  // `dialogue=on|strong` (§191) : la liste maître des rendus « Améliorer les dialogues », si la piste en a un.
+  // `dialogue=on|strong` (§193) : la liste maître des rendus « Améliorer les dialogues », si la piste en a un.
   const dialogue = parseDialogueMode(q.get("dialogue"));
   if (dialogue === null) return goneResponse("lumen-inconnu", "Mode « dialogues » inconnu");
   const wait = Number(q.get("wait") ?? DEFAULT_WAIT_MS);

@@ -86,6 +86,13 @@ export interface TrialModes {
    * variante par codec (`?groupes=codec`), à côté de la règle du format 5 (un seul groupe, tous codecs).
    */
   groups?: "codec";
+  /**
+   * Les sous-titres dans la liste maître (§191) : `?st=premier` — la première piste de texte du titre en rendu
+   * `TYPE=SUBTITLES`, DEFAULT=YES, la forme que l'hôte ne pose que pendant AirPlay. Dans la page, sur l'iPhone, il
+   * faut prouver qu'elle ne fait pas refuser l'élément (code 4, comme les `<track>` posés avec l'adresse) et voir ce
+   * que Safari en fait (`textTracks` au journal : la piste du flux, son genre, son mode).
+   */
+  subtitles?: "liste";
 }
 
 /** Le délai entre Préparer et Lire d'un essai `early` : le temps d'ouvrir une fiche et d'appuyer sur Lire. */
@@ -101,6 +108,7 @@ export function modeTag(modes: TrialModes | undefined): string {
   if (modes.startMode) parts.push(`depart-${modes.startMode === "ext-x-start" ? "xstart" : modes.startMode === "fragment" ? "frag" : "saut"}`);
   if (modes.bandwidth) parts.push("bw");
   if (modes.groups) parts.push("groupes");
+  if (modes.subtitles) parts.push("st");
   return parts.join("-");
 }
 
@@ -114,6 +122,7 @@ export function modeLabel(modes: TrialModes | undefined): string {
   if (modes.startMode) parts.push(`départ par ${modes.startMode === "ext-x-start" ? "EXT-X-START" : modes.startMode === "fragment" ? "#t=" : "saut"}`);
   if (modes.bandwidth) parts.push("débit annoncé moyen");
   if (modes.groups) parts.push("un groupe son par codec (formats 1 à 4)");
+  if (modes.subtitles) parts.push("sous-titres dans la liste");
   return parts.join(", ");
 }
 

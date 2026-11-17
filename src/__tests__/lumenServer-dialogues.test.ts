@@ -9,7 +9,7 @@ import { initName, parseLumenPath, playlistName, segmentName, type LumenAudioTra
 import { masterPlaylist } from "@/lib/lumenServer/playlists";
 import { fixtureIndex } from "./lumenServer-helpers";
 
-// « Améliorer les dialogues » dans Lumen serveur (DECISIONS.md §191) : ce qui se vérifie sans ffmpeg — les noms, la
+// « Améliorer les dialogues » dans Lumen serveur (DECISIONS.md §193) : ce qui se vérifie sans ffmpeg — les noms, la
 // vue, la liste maître, le traitement d'un segment depuis son pré-roulement (une fonction de sa plage seule, le code du
 // lecteur actuel), et la conversion « dialogues » avec un ffmpeg remplacé (décodage partagé ou par segment, un encodage
 // par segment). Les jointures sur de vrais films, l'identité seul/avance et les niveaux : `lumen-dialogue-bench.spec.ts`.

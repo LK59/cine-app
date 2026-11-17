@@ -51,7 +51,7 @@ export interface PlaybackMode {
 export const LEAD_US = 120_000_000;
 export const LEAD_TASK_US = 60_000_000;
 /**
- * Une tâche d'avance « dialogues » (§191) : 30 s. Son PCM décodé passe par Node (≈ 1,2 Mo par seconde en 5.1), et
+ * Une tâche d'avance « dialogues » (§193) : 30 s. Son PCM décodé passe par Node (≈ 1,2 Mo par seconde en 5.1), et
  * chaque segment est traité depuis ses 6 s de pré-roulement : 30 s tiennent ~45 Mo et ~1,5 s de calcul.
  */
 export const DIALOGUE_LEAD_TASK_US = 30_000_000;
@@ -197,7 +197,7 @@ interface Session {
   lastAt: number;
   leading: boolean;
   readFeed: FeedReader;
-  /** Un rendu « dialogues » (§191) : son traitement, que l'avance refait pour chaque tâche. */
+  /** Un rendu « dialogues » (§193) : son traitement, que l'avance refait pour chaque tâche. */
   dialogue?: DialogueRun;
 }
 
@@ -214,7 +214,7 @@ export interface ConvertRequest {
   /** La lecture (`compte\0s`) : pour l'avance et l'admission ; sans elle (préparation anonyme), ni l'une ni l'autre. */
   session?: string;
   /**
-   * Un rendu « dialogues » (§191) : `track` est la vue `dialogueTrackView` (convertie sous l'identité du traitement),
+   * Un rendu « dialogues » (§193) : `track` est la vue `dialogueTrackView` (convertie sous l'identité du traitement),
    * et la conversion passe le PCM par `DialogueEnhancer` (`convertDialogueRange`). Jamais par le pool.
    */
   dialogue?: DialogueRun;

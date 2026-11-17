@@ -55,7 +55,7 @@ export interface MasterOptions {
    */
   perCodecGroups?: boolean;
   /**
-   * « Améliorer les dialogues » (§191, `?dialogue=on|strong`) : chaque piste qui a un rendu « dialogues » est servie
+   * « Améliorer les dialogues » (§193, `?dialogue=on|strong`) : chaque piste qui a un rendu « dialogues » est servie
    * par lui **à la place** de son rendu ordinaire — même rang, même groupe, même nombre de rendus, l'URI, le `CODECS`
    * et les `CHANNELS` de ce qui est servi. Une piste sans ce rendu (AAC, FLAC…) garde le sien : l'hôte le sait par le
    * verdict (`dialogue` de chaque piste) et rend la lecture au lecteur actuel s'il la choisit.
@@ -66,7 +66,7 @@ export interface MasterOptions {
   dialogue?: LumenDialogueMode;
 }
 
-/** Ce qu'une piste sert dans une liste maître : son rendu ordinaire, ou son rendu « dialogues » (§191). */
+/** Ce qu'une piste sert dans une liste maître : son rendu ordinaire, ou son rendu « dialogues » (§193). */
 function servedAs(a: LumenAudioTrack, dialogue: LumenDialogueMode | undefined): { track: LumenAudioTrack; rendition: LumenRendition } {
   const processed = dialogue && a.dialogue ? dialogueRendition(a, dialogue) : null;
   if (!processed || !a.dialogue) return { track: a, rendition: audioRendition(a) };
@@ -178,7 +178,7 @@ function independentSegments(index: LumenIndex): string[] {
 }
 
 /** Une durée en secondes, au microseconde, sans zéros inutiles : `4.004`, `10.427083`. */
-function seconds(us: number): string {
+export function extinfSeconds(us: number): string {
   return (us / 1e6).toFixed(6).replace(/\.?0+$/, "") || "0";
 }
 
@@ -195,7 +195,7 @@ export function mediaPlaylist(index: LumenIndex, rendition: LumenRendition): str
     `#EXT-X-MAP:URI=${quoted(initName(rendition))}`,
   ];
   index.segments.forEach((s, n) => {
-    lines.push(`#EXTINF:${seconds(s.endUs - s.startUs)},`, segmentName(rendition, n));
+    lines.push(`#EXTINF:${extinfSeconds(s.endUs - s.startUs)},`, segmentName(rendition, n));
   });
   lines.push("#EXT-X-ENDLIST");
   return `${lines.join("\n")}\n`;

@@ -53,7 +53,7 @@ import { readDolbyHeader } from "./dolbySilence";
  * jamais converti en service — ces pistes se copient — : il sert au banc, qui fait passer une piste copiable par la
  * chaîne de conversion pour comparer son décodage à celui de la copie (la synchronisation image-son, à
  * l'échantillon) et pour éprouver le silence devant une piste qui commence tard. Il sert aussi les rendus « Améliorer
- * les dialogues » d'une piste Dolby copiée (§191, `dialogueSourceOf`) : décodée, traitée, réencodée — la copie, elle,
+ * les dialogues » d'une piste Dolby copiée (§193, `dialogueSourceOf`) : décodée, traitée, réencodée — la copie, elle,
  * reste servie telle quelle.
  */
 export type ConvertCodec = "dts" | "truehd" | "opus" | "mpeg" | "dolby";

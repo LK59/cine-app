@@ -226,7 +226,7 @@ const DIALOGUE_EXECUTOR = Symbol.for("cine-app.lumenServer.dialogueExecutor");
 export const LUMEN_DIALOGUE_THREADS = 2;
 
 /**
- * Les fils de calcul de « Améliorer les dialogues » (§191, travail `dialogue`), créés au premier segment traité : une
+ * Les fils de calcul de « Améliorer les dialogues » (§193, travail `dialogue`), créés au premier segment traité : une
  * tâche d'avance de 30 s, chaque segment avec ses 6 s de pré-roulement, c'est ~1,5 s de calcul (18 ms par seconde de
  * son, mesuré) — ni la lecture des blocs d'une autre conversion ni un segment vidéo n'ont à l'attendre. Deux fils :
  * la file de la conversion borne déjà les tâches simultanées (`LUMEN_AUDIO_MAX_JOBS`, 2).
@@ -282,7 +282,7 @@ export async function lumenIndexOf(itemId: string, cutting: Partial<LumenCutting
   for (let attempt = 0; ; attempt++) {
     if ("refusal" in file) return file;
     try {
-      // La vue de la conversion (§161), puis celle des rendus « dialogues » (§191) : l'index lui-même quand elles ne
+      // La vue de la conversion (§161), puis celle des rendus « dialogues » (§193) : l'index lui-même quand elles ne
       // sont pas permises à cette requête.
       return { index: withDialogue(withConversion(await engine.index(file.path, targetUs, cut), conversion), conversion) };
     } catch (error) {
@@ -406,7 +406,7 @@ export async function lumenSegment(
   n: number,
   options: { keep?: boolean; session?: string } = {}
 ): Promise<{ segment: BuiltSegment; reused: boolean }> {
-  // Un rendu « dialogues » (§191) : une conversion comme une autre (cache, file, avance), sous l'identité de son
+  // Un rendu « dialogues » (§193) : une conversion comme une autre (cache, file, avance), sous l'identité de son
   // traitement, avec `DialogueEnhancer` entre le décodeur et l'encodeur.
   if (rendition.kind === "audio" && rendition.dialogue) {
     const mode = rendition.dialogue;
@@ -484,7 +484,7 @@ export interface LumenAudioFacts {
   convertible: boolean;
   convertRefusal: string | null;
   /**
-   * La piste a ses rendus « Améliorer les dialogues » (§191) : la cible (`eac3-640-51`, `eac3-256-20`) ; null sinon
+   * La piste a ses rendus « Améliorer les dialogues » (§193) : la cible (`eac3-640-51`, `eac3-256-20`) ; null sinon
    * (option coupée, ffmpeg absent, AAC, FLAC…). Absent des réponses d'avant : null.
    */
   dialogue?: string | null;
@@ -519,7 +519,7 @@ export type LumenVerdict =
       /** La piste choisie est convertie (§161) : l'état de la conversion de cette lecture. */
       conversion?: { state: "ok" | "tension"; leadS: number };
       /**
-       * « Améliorer les dialogues » demandé (`?dialogue=`, §191) : servi (`master` porte alors `&dialogue=`), ou pourquoi
+       * « Améliorer les dialogues » demandé (`?dialogue=`, §193) : servi (`master` porte alors `&dialogue=`), ou pourquoi
        * non — la piste n'a pas de rendu traité, ou le serveur n'admet pas une lecture de plus qui convertit. Non servi,
        * `master` est la liste ordinaire : l'hôte rend alors la lecture au lecteur actuel, qui fait le traitement.
        */
@@ -575,7 +575,7 @@ export async function lumenVerdict(
     session?: Pick<SessionPayload, "role" | "u"> & Partial<Pick<SessionPayload, "jti" | "jfId">>;
     /** L'adresse munie du laissez-passer d'une Apple TV (§186) : le lecteur la demande (`?tv=1`), le banc non. */
     tv?: boolean;
-    /** « Améliorer les dialogues » demandé (§191) : la liste maître de ses rendus, si la piste choisie en a un. */
+    /** « Améliorer les dialogues » demandé (§193) : la liste maître de ses rendus, si la piste choisie en a un. */
     dialogue?: LumenDialogueMode;
   } & Partial<LumenCutting>
 ): Promise<LumenVerdict> {
@@ -621,7 +621,7 @@ export async function lumenVerdict(
     if (!admission.ok) return { ok: false, reason: "son-serveur-occupe", detail: admission.detail, audioTrack, audio, version, cutFacts };
     conversionState = lumenAudio().audioState(key);
   }
-  // « Améliorer les dialogues » (§191) : servi si la piste choisie a son rendu et que le serveur admet une lecture de
+  // « Améliorer les dialogues » (§193) : servi si la piste choisie a son rendu et que le serveur admet une lecture de
   // plus qui convertit (la même admission que §163 — un rendu « dialogues » est une conversion). Sinon le verdict reste
   // `ok` pour la liste ordinaire, et dit pourquoi : la lecture elle-même reste possible, c'est le traitement qui ne
   // l'est pas ici — l'hôte la rend alors au lecteur actuel.

@@ -694,10 +694,12 @@ element at `#t=` with `prepare` sent first and the last frame frozen on top — 
 (`tvPass.ts`: its own key, signed `lumen` scope, administrator role, one title, one playback, the session alive, six
 hours), let through by the proxy (`lumenTvPassFor`) and re-verified by the route; a request that also carries a cookie
 must pass the ordinary check too. Relative URIs make every segment inherit the token; video segments fetched without a
-cookie feed `castProgress`. **Fallbacks**: before the first picture (refusal, code 4, 20 s without a picture) the native
+cookie feed `castProgress`. A text subtitle reaches the television in the stream (§191): while casting only, the element
+reopens `master.m3u8?…&st=<Jellyfin index>`, which adds one WebVTT `SUBTITLES` rendition (DEFAULT=YES) segmented on the
+video grid (`subtitles.ts`, `X-TIMESTAMP-MAP` at the delay D) — without `st` the master is byte-identical. **Fallbacks**: before the first picture (refusal, code 4, 20 s without a picture) the native
 player takes over in the same page (`declineLumen`); after it, the playback recovers **on this path** (`recover`: the
 server re-read for up to 90 s across a deploy, a new version reopened at the position), the server player only when the
-file is no longer served or after three reopenings. **« Améliorer les dialogues » is done by the server** (§191) when
+file is no longer served or after three reopenings. **« Améliorer les dialogues » is done by the server** (§193) when
 `LUMEN_AUDIO_CONVERT` allows: `DialogueEnhancer` itself (not an ffmpeg port — the pinned binary has no EQ/compressor,
 and three stages have no filter equivalent) runs in a worker on ffmpeg's decoded PCM, each segment from its own 6 s
 pre-roll with a fresh enhancer, then one E-AC-3 encode per segment — still a pure function of the file; AC-3/E-AC-3 are

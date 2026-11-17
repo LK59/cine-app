@@ -11792,6 +11792,7 @@ le rôle.
 - **Les sous-titres ne vont pas au téléviseur** par ce chemin (des `<track>` de la page, pas des rendus de la liste
   maître) : avec un sous-titre affiché, « Diffuser » passe au lecteur serveur comme avant, qui les porte. Une route
   AirPlay prise depuis le centre de contrôle avec un sous-titre affiché le laisse sur le téléphone seulement.
+  **Remplacé par §191** pour un sous-titre de texte : il va au téléviseur dans le flux (`?st=`), sans changer de lecteur.
 - **Le jeton est dans l'adresse de la page aussi** : la même `src` sert l'élément et le téléviseur (le bouton AirPlay
   tend la `src` courante), comme l'adresse du lecteur serveur porte `castToken`. Il finit dans les journaux d'accès du
   relais inverse : c'est pour cela qu'il meurt avec la session et ne vaut que pour un titre et une lecture.
@@ -11855,6 +11856,9 @@ mini-lecteur. L'image figée d'une réouverture (§185) est dans le même cadre 
   lecteur actuel ; le choisir retient le réglage de l'appareil (`writeDialogueMode`, le même) et rend la lecture au
   lecteur actuel à la position (`fallback` `to: natif`, `planned: true`, motif « améliorer les dialogues demandé »),
   qui applique le traitement ; et `lumenWanted` décline Lumen serveur tant que le réglage est allumé sur l'appareil.
+  **Remplacé par §193** (même jour) : le serveur fait le traitement (`DialogueEnhancer` lui-même, pré-roulement de 6 s,
+  jointures prouvées) ; le retour au lecteur actuel ne reste que lorsque le serveur ne peut pas le servir, et
+  `lumenWanted` ne décline plus ce chemin pour le réglage.
 
 **Porteurs.** `LumenServerHost.tsx` (`frameFitState`, `chooseDialogue`), `lumenServerChoice.ts` (`lumenWanted`,
 `dialogue`). **Tests.** `LumenServerHost.test.tsx`, `lumen-aiguillage.test.ts`.
@@ -11903,9 +11907,185 @@ règle de plus ; `activeCues` ne convient pas, il ne connaît que l'instant de l
 
 **Ce qui diffère exprès.** Le lecteur serveur (`PlayerHost`, `useServerDualSubtitles`) laisse toujours le navigateur
 dessiner un sous-titre seul : ses empreintes ne bougent pas. AirPlay inchangé (§186) : avec un sous-titre choisi,
-« Diffuser » passe au lecteur serveur. Le mini-lecteur ne montre aucun sous-titre (il n'y a plus de dessin de Safari).
+« Diffuser » passe au lecteur serveur (depuis §191, un sous-titre de texte va au téléviseur dans le flux). Le mini-lecteur ne montre aucun sous-titre (il n'y a plus de dessin de Safari).
 
 **Porteurs.** `useLumenSubtitleLines.ts` (modes, lignes, relecture à la prochaine borne quand le décalage rend
 `cuechange` muet), `src/lib/textTrackCues.ts`, `LumenServerHost.tsx` (`primaryLane`, `secondLane`, décalages, calque),
 `useLumenSubtitleGeneration.ts` (`offset`). **Tests.** `textTrackCues.test.ts`, `LumenServerHost.test.tsx` (« les sous-titres par le calque de la
 page »).
+
+## 191. AirPlay sur Lumen serveur avec sous-titres : un rendu WebVTT dans la liste maître, demandé par `?st=` pendant la diffusion seulement (17/11/2026)
+
+**Règle.** Le sous-titre choisi sur le téléphone va au téléviseur **dans le flux HLS** : la liste maître demandée avec
+`?st=<index Jellyfin>` gagne **un seul** rendu `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs"` — LANGUAGE, NAME
+(`trackLabel.ts`, l'étiquette des menus), DEFAULT=YES, AUTOSELECT=YES, FORCED=YES pour un forcé, les CHARACTERISTICS
+d'Apple pour des sous-titres pour malentendants, URI relative — et `SUBTITLES="subs"` sur chaque variante ; le reste
+de la liste est celui de la règle, octet pour octet (`withSubtitleRendition`, une transformation de texte à part de
+`masterPlaylist`). Sa liste média (`s{index}h{empreinte}.m3u8`) a les EXTINF et la durée cible de la vidéo ; chaque
+segment `s{index}h{empreinte}/{n}.vtt` est un WebVTT : `X-TIMESTAMP-MAP=MPEGTS:round(D × 90 000),LOCAL:00:00:00.000`,
+puis chaque réplique qui recoupe le segment, entière et avec ses instants d'origine — une réplique à cheval est dans
+les deux segments, à l'identique. Les répliques viennent du WebVTT que Jellyfin tire de la piste (la conversion de la
+route des sous-titres), synchro §141 appliquée par `rewriteVttTimes`. Texte seulement (SRT, ASS, WebVTT, mov_text) :
+une piste en images n'est jamais un rendu.
+
+**Dans l'hôte** (`LumenServerHost`, `castSubtitles.ts`) : « Diffuser » avec un sous-titre de texte reste sur ce chemin
+(le sélecteur AirPlay, comme sans sous-titre) ; dès la route établie (bouton ou centre de contrôle), la liste est
+rouverte **sur le même élément**, à la position, avec `?st=<index>` (`reopenForCastSubtitle`) ; les `<track>` de la
+page sont retirés avant que l'adresse ne soit posée et reviennent à l'image ; changer de sous-titre pendant la
+diffusion rouvre avec le nouveau `st`, le retirer rouvre sans. Les pistes du flux sont en `showing` pendant une
+diffusion qui en porte une (la sélection du lecteur de WebKit, qu'AirPlay transmet), `disabled` partout ailleurs
+(`applyInbandModes`) ; le calque de la page se tait pendant que le téléviseur dessine. Une génération en cours (sans
+fichier) ou un navigateur sans sélecteur AirPlay : le lecteur serveur, comme avant (§186). Deux sous-titres : le
+téléviseur montre le principal.
+
+**Pourquoi `?st=` pendant la diffusion seulement**, et pas un groupe de sous-titres toujours dans la liste : dans la
+page, sur l'iPhone, rien n'a encore prouvé qu'un rendu de sous-titres ne fait pas refuser l'élément (code 4) comme les
+`<track>` posés avec l'adresse (b8e3682d, §190), ni que Safari ne le dessine pas de lui-même sous notre calque
+(DEFAULT=YES, ou un forcé qu'AVFoundation montre d'office). Sans `st`, la liste maître est celle du format 5 à
+l'octet près : la lecture sur le téléphone ne change pas. Le banc `/lumen-test` a un levier « sous-titres dans la
+liste » (`?st=premier`) qui l'essaie dans la page et écrit `textTracks` (genre, langue, étiquette, mode) au journal.
+**Pourquoi un seul rendu, DEFAULT=YES** : un récepteur AirPlay de téléviseur d'une autre marque n'a souvent pas de
+menu de pistes (`castSubtitle.ts`) ; le téléviseur n'a rien à choisir, et dans la page la seule piste du flux est la
+bonne, sans deviner un ordre. **Pourquoi les deux leviers** (DEFAULT=YES et `showing`) : AirPlay depuis une `<video>`
+transmet l'adresse et la sélection du lecteur de WebKit ; lequel des deux l'Apple TV suit n'est pas documenté — l'un ou
+l'autre suffit, l'appareil dira lequel.
+
+**`X-TIMESTAMP-MAP`.** Les segments fMP4 présentent chaque échantillon à son instant du fichier plus le délai D
+(`segment.ts` : `compositionOffset + delayUs`, `timestamp + delayUs` ; pas d'`elst` dans l'init), et les répliques de
+Jellyfin sont datées sur le temps du fichier. Sans la balise, rfc8216bis dit que 0 des répliques vaut 0 du flux :
+chaque réplique arriverait D (100 à 200 ms) trop tôt. La correspondance relie deux instants du flux, elle ne dépend
+pas de l'horloge que le lecteur affiche.
+
+**Sans état** (§155). Le nom d'un rendu porte l'index Jellyfin et une empreinte (FNV-1a) de la source, de la piste
+(codec, langue, titre, drapeaux, chemin d'un fichier à côté), de la version de sa synchro et de
+`LUMEN_SUBTITLE_REVISION` : une piste changée chez Jellyfin ou une synchro refaite est une autre adresse, l'ancienne
+répond 410. `LUMEN_FORMAT_VERSION` passe à 6 (la liste maître sait une forme de plus) ; une règle de découpe des
+sous-titres qui change fait monter `LUMEN_SUBTITLE_REVISION`, pas le format. Les segments WebVTT sont gardés une heure
+(`private, max-age=3600`) et non `immutable` : leurs octets viennent de la conversion de Jellyfin.
+
+**Accès et absences.** Rien ne change aux contrôles : le laissez-passer d'une Apple TV (§186, URI relatives : le jeton
+s'hérite) ou la session de l'administrateur (`lumenAccess`, `assertVisible`), revérifiés par `serveLumenName` avant
+tout. Jellyfin est lu avec le compte de la session (ou de l'administrateur du laissez-passer), comme
+`/api/lumen/{id}/pistes`. Un nom qui ne désigne plus rien : 410 ; Jellyfin muet : 503 ; jamais 404 ni 400 (CrowdSec).
+La liste maître ne refuse jamais pour les sous-titres : Jellyfin muet ou piste inconnue, elle part sans rendu et le dit
+(`X-Lumen-Sous-Titres` : `rendu`, `absent`, `indisponible`). Les requêtes de sous-titres ne comptent pas au relevé de la
+lecture (`requests`, image et son).
+
+**Journal et panneau.** Une ligne `cast` par changement (`reason: "sous-titres au téléviseur"`, `subtitles` —
+l'étiquette ou `"aucun"` —, `st`, `fromSt`, `tookMs`, `pictureMs`, `error` si la réouverture a échoué), en plus de
+« diffusion établie » ; le panneau technique dit « Sous-titres au téléviseur » pendant AirPlay.
+
+**Différent exprès.** Le lecteur serveur garde son incrustation (`castSubtitle.ts`) ; le lecteur natif et ses
+empreintes ne bougent pas. Une adresse qui porte encore `st` après la fin d'une diffusion n'est pas rouverte : ses
+pistes du flux restent éteintes, et une réouverture suivante (piste son) la garde.
+
+**Porteurs.** `src/lib/lumenServer/subtitles.ts` (noms, ligne, liste, WebVTT, découpe, `timestampMap`),
+`subtitleServe.ts` (Jellyfin, caches sur `globalThis`, réponses), `serve.ts` (aiguillage, `?st=` sur la liste maître),
+`format.ts` (version 6), `playlists.ts` (`extinfSeconds` partagé), `castSubtitles.ts` et `LumenServerHost.tsx`
+(`reopenForCastSubtitle`, `applyInbandModes`, `requestCast`), `useLumenSubtitleLines.ts` (modes des seuls `<track>`),
+`lumenLog.ts` (`lumenCastSubtitleFields`), `lumenPanel.ts`, `LumenTest.tsx` / `autoSeries.ts` / `testReport.ts` (le
+levier du banc). **Tests.** `lumenServer-subtitles.test.ts`, `lumen-cast-subtitles.test.ts`,
+`lumenServer-routes.test.ts` (« les sous-titres dans la liste maître »), `LumenServerHost.test.tsx` (« le sous-titre
+au téléviseur »).
+
+## 193. « Améliorer les dialogues » dans Lumen serveur : `DialogueEnhancer` lui-même, côté serveur, segment par segment depuis son pré-roulement (17/11/2026)
+
+**Règle.** Quand la conversion du son est permise à la requête (`LUMEN_AUDIO_CONVERT`, ffmpeg conforme — le contexte
+de §161), chaque piste servie qui se décode ici a deux rendus de plus, « Améliorer » (`a{N}d1x{cid}`) et « Améliorer
+davantage » (`a{N}d2x{cid}`) : la piste décodée par le ffmpeg de l'image, repliée par `panFor` (la règle de `fold`),
+**traitée par `DialogueEnhancer` (`dialogueEnhance.ts`, la v2 de §68, le même code que le lecteur actuel)** dans un fil
+de calcul (travail `dialogue`, deux fils à part), puis encodée en E-AC-3 vers la cible de §161 (640 kb/s 5.1, 256 kb/s
+2.0). Une seconde liste maître, `master.m3u8?…&dialogue=on|strong`, sert chaque piste **par son rendu traité à la place
+du sien** (même rang, même groupe, même nombre de rendus) ; une piste sans rendu traité y garde le sien.
+- **Les pistes** (`dialogueSourceOf`, `withDialogue` dans `audio/view.ts`) : les pistes converties (DTS, TrueHD, Opus,
+  MP2/MP3, leurs faits de §161) et les AC-3/E-AC-3 copiées (leurs faits tirés de l'index : premier bloc, sa trame, la fin
+  d'une piste courte — la voie `dolby` du banc de §161, à 0 échantillon de la copie), si le binaire a les décodeurs
+  `ac3`/`eac3` (`dolby` de la détection). **Pas** l'AAC, le FLAC, le PCM, le MP4, ni une E-AC-3 à sous-flux dépendant
+  (la disposition décodée ne serait pas sûrement celle du conteneur). Le mono est traité en mono (la voix seule, comme
+  le lecteur actuel), puis copié dans les deux canaux.
+- **Le pré-roulement** (`DIALOGUE_PREROLL`, 6 s) : chaque segment est traité par un `DialogueEnhancer` **neuf** depuis
+  6 s avant sa fenêtre d'encodeur, le pré-roulement jeté ; puis **encodé seul** (un ffmpeg par segment, la fenêtre de
+  §161 : 2 trames devant, 3 derrière). Un segment ne dépend donc que du signal x sur [début − 6 s − pré-roulement du
+  décodeur, fin) et de la force : une fonction du fichier, par construction, seul ou pris dans une tâche d'avance.
+- **Le décodage** : partagé par les segments d'une tâche pour les décodeurs exacts au bit (DTS, TrueHD, Opus, MPEG en
+  flottants) ; **un par segment pour l'AC-3/E-AC-3** (`decodeSharedAcrossSegments`) — le décodeur Dolby de FFmpeg tire
+  un tramage pseudo-aléatoire (`dithflag`, un `av_lfg` semé à l'ouverture) dont l'état dépend de tout ce qu'il a décodé
+  depuis son départ : au premier banc, 1 segment sur 6 identique entre l'avance et le segment seul ; 6 sur 6 depuis.
+- **L'identité** (`dialogueConversionId`) : la conversion (`conversionId` : règles, cible, version et SHA-256 de
+  ffmpeg), `LUMEN_DIALOGUE_VERSION`, la force et `process.versions.v8` (le traitement est du calcul flottant de V8). Une
+  autre identité = 410. **`dialogueEnhance.ts` changé ⇒ monter `LUMEN_DIALOGUE_VERSION`** (un test garde son SHA-256).
+- **`LUMEN_FORMAT_VERSION` ne monte pas** (reste 6) : rien n'est servi autrement à une adresse existante — la liste
+  maître sans `?dialogue=`, les listes, inits et segments d'avant sont les mêmes à l'octet (un test le compare) ; seules
+  des adresses neuves apparaissent, dont le `cid` porte tout ce qui en fixe les octets (§155).
+- **La file** : un segment « dialogues » est une conversion (cache deux étages, `LUMEN_AUDIO_MAX_JOBS`, demande avant
+  avance, budget de 8 s puis 503 `X-Lumen-Son: occupe`) ; une tâche tient une place et n'a qu'un ffmpeg à la fois ;
+  l'avance par tâches de 30 s (`DIALOGUE_LEAD_TASK_US` : le PCM traverse Node). L'admission (§163) vaut pour une lecture
+  copiée qui demande le traitement : refusée, le verdict reste `ok` sur la liste ordinaire avec
+  `dialogue: { served: false, reason: "son-serveur-occupe" }`.
+- **L'hôte** (`LumenServerHost`) : le réglage de l'appareil (`readDialogueMode`) est demandé au verdict d'ouverture
+  (`&dialogue=`) ; servi, l'élément ouvre la liste traitée ; non servi (AAC, FLAC, option coupée, serveur occupé), le
+  déclin d'avant l'image vers le lecteur actuel, qui le fait dans la page (`stage: "dialogues"`). `lumenWanted` ne
+  décline plus ce chemin pour le réglage. En lecture, changer de force = la réouverture d'un changement de piste (§185 :
+  même élément, image figée, `prepare` avant, avec `dialogue`) vers la liste du verdict ; couper = la liste sans
+  `dialogue`, sans rien demander au serveur ; le serveur qui refuse = la règle de §188 (rendu au lecteur actuel). Une
+  piste sans rendu traité choisie pendant que la liste traitée est posée est servie telle quelle, et le menu dit « Sans
+  effet sur cette piste audio ». `recover` redemande la même force ; un serveur qui ne la sert plus rouvre la liste
+  ordinaire (dit dans le panneau).
+- **Le journal** : `start` porte `dialogue` (la force) et `dialogueBy: "serveur"` ; chaque ligne `audio` porte
+  `dialogue` (la force servie après le changement ; un changement de force a `from` = `to`) et `processing` (« dialogues
+  davantage par le serveur (A_DTS → E-AC-3 5.1) », « …, sans rendu « dialogues » ») ; le panneau dit la même livraison et
+  l'incident (`player.info.lumen.eventDialogue`, quatre langues).
+
+**Pourquoi le code du lecteur actuel et pas des filtres ffmpeg.** Le ffmpeg de l'image (`tools/ffmpeg-lumen/`) n'a que
+31 filtres : ni `equalizer`, ni `acompressor`, ni `sidechaincompress` — en ajouter, c'est un autre binaire, donc une
+autre identité pour tout le son converti. Et trois étapes n'ont pas d'équivalent filtre : le détecteur de parole
+(énergie 300–3400 Hz contre pleine bande, lissée 40/450 ms) qui pilote le retrait du fond, le plafond du fond relatif au
+niveau de la **voix mise en forme**, le niveleur qui ne fait que remonter une voix, coupé sous −62 dBFS. Une traduction
+serait « un autre son que celui validé » (l'objection de §188). La correspondance, étape par étape : décodage → ffmpeg
+(décodeur de §161) ; repli 7.1 → 5.1 et 3/4/5/7 canaux → L R C → `pan` de `panFor` (la règle de `fold`) ; égalisation
+(plateau bas 150 Hz, cloches 1 kHz Q 0,8 et 3 kHz Q 0,9), gains fixes, niveleur, plafond 2:1 à −10 dBFS, détecteur,
+retrait, fond relatif, compresseur du fond, deux limiteurs sous −1 dBFS → `DialogueEnhancer` tel quel, mêmes
+`DIALOGUE_TUNING` ; encodage → l'E-AC-3 de §161. Coût : 18 ms de calcul par seconde de son, ~180 ms par segment de 4 s
+avec ses 6 s de pré-roulement, dans un fil de calcul.
+
+**Mesuré** (`lumen-dialogue-bench.spec.ts`, 17/11/2026, binaire de l'image, `--cpus 2`, X-Ray en pause, fichiers en
+lecture seule ; *Interstellar* et *Tenet* DTS-HD MA 5.1 aux scènes de §68, *Braveheart* TrueHD 7.1 et VF E-AC-3, *Lost
+in Translation* DTS, *American Housewife* AC-3 2.0 et 5.1, *House* E-AC-3, *JoJo* Opus 2.0, *L'Exorciste* E-AC-3 et
+AC-3 mono ; 6 segments par piste, les deux forces) :
+- **identité** : 6/6 segments identiques à l'octet entre l'avance et chaque segment fait seul, partout ; un segment
+  refait, identique ;
+- **jointures, avant l'encodeur**, contre un traitement continu parti 40 s plus tôt — écart maximal selon le
+  pré-roulement : 1 s −16 à −118 dBFS, 2 s −19 à −150, 4 s −62 à −131, **6 s −100 à −175 dBFS** (5.1 : ≤ −144 ; stéréo
+  et mono, où le niveleur pèse sur tout : −100 à −145) ; inaudible de très loin (le bruit de codage de l'E-AC-3 est à
+  30–48 dB sous le signal) ;
+- **après l'encodeur** : rapport signal/écart du décodé servi contre le traitement continu égal à celui d'un seul
+  encodage continu (à 0,3 dB près ; 1,5 à 2 dB sur l'AC-3 d'*American Housewife*, où la référence continue a un autre
+  tramage du décodeur) ; **rapport de clic** aux jointures (dérivée seconde ±2 ms contre les 100 ms voisines, canal des
+  voix), servi contre l'encodage continu au même endroit : 0,99 à 1,24 — aucun clic ;
+- **niveaux** (`astats`, RMS par canal) : le rendu servi = la chaîne du lecteur actuel sur le même PCM à ±0,01 dB (le LFE
+  de scènes calmes, sous −85 dBFS, à ±0,5 dB : le codage) ; la voix remontée de −1,9 à +11 dB selon la scène et la
+  force, faces et ambiances baissées (*Interstellar* 2:08:50 « davantage » : centre −17,1 → −15,7 dBFS, faces −13,5 →
+  −23,5, LFE −15,0 → −32,9) ;
+- **coût** : un segment seul 0,3 à 1,8 s (la lecture des blocs sur 10 s de son en fait l'essentiel ; TrueHD le plus
+  cher), une tâche de 6 segments 1,3 à 9,6 s sous 2 cœurs. Le `prepare` d'ouverture et l'avance de 120 s le cachent.
+
+**Différent exprès.**
+- **Pas de rendus ajoutés à côté des autres dans la même liste** : le menu système de Safari (AirPlay, Lecture en cours)
+  montrerait chaque piste deux fois, et `audioTracks` ne se relierait plus au menu de la page.
+- **Une piste choisie sans rendu traité** est jouée telle quelle (« Sans effet »), alors que choisir la force sur elle
+  rend la main au lecteur actuel (§188) : changer de langue ne doit pas faire changer de lecteur.
+- **AirPlay** : le téléviseur reçoit la liste posée, donc le son traité — ce que la voie Web Audio écartée par §188 ne
+  pouvait pas.
+- `parseMasterAudio` relie désormais aussi les rendus `a{N}x{cid}` et `a{N}d…` au menu : une piste convertie (§161)
+  peut changer par `audioTracks` au lieu de toujours rouvrir.
+
+**Porteurs.** `src/lib/lumenServer/audio/dialogue.ts` (`DIALOGUE_PREROLL`, `enhanceWindow`, `LUMEN_DIALOGUE_VERSION`),
+`convert.ts` (`convertDialogueRange`, `decodeSharedAcrossSegments`), `view.ts` (`withDialogue`, `dialogueSourceOf`,
+`dialogueConversionId`, `dialogueTrackView`, `dialogueRendition`), `conversion.ts` (`DIALOGUE_LEAD_TASK_US`), `ffmpeg.ts`
+(`dolby`), `jobs.ts`/`worker.ts`/`pool.ts` (travail `dialogue`, tampons transférés), `format.ts` (noms), `engine.ts`,
+`playlists.ts`, `serve.ts`, `service.ts` (`lumenDialogueRun`, verdict, `masterAddress`), les routes `eligibility` et
+`prepare`, `LumenServerHost.tsx` (`chooseDialogue`, `handBackForDialogue`, `servedDialogue`), `lumenOpening.ts`,
+`lumenLog.ts`, `lumenServerChoice.ts`, `lumenSheetPrepare.ts`. **Tests.** `lumenServer-dialogues.test.ts`,
+`lumenServer-dialogues-routes.test.ts`, `LumenServerHost.test.tsx` (« Améliorer les dialogues »),
+`lumen-aiguillage.test.ts` ; les empreintes du lecteur, inchangées. **Banc.** `lumen-dialogue-bench.spec.ts` (sauté
+sans `LUMEN_DIALOGUE_FILES` ni ffmpeg).

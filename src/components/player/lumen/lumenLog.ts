@@ -55,7 +55,7 @@ export interface LumenStartFacts {
   /** Le son multiplexé dans les segments vidéo (essai `m1`, réglage serveur). */
   muxed?: boolean;
   /**
-   * « Améliorer les dialogues » servi par le serveur (§191) : la force (`on` / `strong`), à la place du champ
+   * « Améliorer les dialogues » servi par le serveur (§193) : la force (`on` / `strong`), à la place du champ
    * `dialogue` de la ligne `start` du lecteur actuel (§68) — absent quand le traitement n'est pas servi.
    */
   dialogue?: LumenDialogueMode | null;
@@ -154,7 +154,7 @@ export function lumenAudioFields(
     pictureMs?: number;
     frozen?: boolean;
     /**
-     * « Améliorer les dialogues » (§191) : la force servie après ce changement (`on`, `strong`, `off`). Posé sur un
+     * « Améliorer les dialogues » (§193) : la force servie après ce changement (`on`, `strong`, `off`). Posé sur un
      * changement de force (même piste, `from` = `to`) et sur un changement de piste pendant que le traitement est servi.
      */
     dialogue?: DialogueMode;
@@ -338,6 +338,31 @@ export function lumenRebuildFields(
     ...(rebuild.fromVersion !== rebuild.toVersion ? { fromVersion: rebuild.fromVersion, toVersion: rebuild.toVersion } : { version: rebuild.toVersion }),
     lumenSession,
     ...background,
+  };
+}
+
+/**
+ * Le sous-titre porté au téléviseur pendant AirPlay (§191) : une ligne `cast` par changement — mis, changé, retiré —,
+ * écrite quand la liste rouverte avec `?st=` a donné son image (ou a échoué, `error`). `subtitles` : l'étiquette du
+ * menu, ou `"aucun"`. `cast: true` quoi que dise le contexte, comme la ligne « diffusion établie ».
+ */
+export function lumenCastSubtitleFields(
+  ctx: ServerPlayerContext,
+  facts: { subtitles: string | null; st: number | null; fromSt: number | null; at: number; tookMs: number; pictureMs?: number; error?: string | null },
+  lumenSession: string
+): Record<string, unknown> {
+  return {
+    ...serverLineFields(ctx),
+    cast: true,
+    reason: "sous-titres au téléviseur",
+    subtitles: facts.subtitles ?? "aucun",
+    st: facts.st,
+    ...(facts.fromSt !== null ? { fromSt: facts.fromSt } : {}),
+    at: Math.round(facts.at),
+    tookMs: Math.round(facts.tookMs),
+    ...(facts.pictureMs !== undefined ? { pictureMs: Math.round(facts.pictureMs) } : {}),
+    ...(facts.error ? { error: facts.error.slice(0, 160) } : {}),
+    lumenSession,
   };
 }
 

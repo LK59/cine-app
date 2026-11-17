@@ -56,6 +56,7 @@ import type { ExternalSubtitleSource } from "@/lib/webcodecs/externalSubtitles";
 import { languageName } from "@/lib/trackLabel";
 import { useLumenSubtitleGeneration } from "./useLumenSubtitleGeneration";
 import { useLumenSubtitleLines } from "./useLumenSubtitleLines";
+import { applyInbandModes, castStaysOnLumen, castSubtitleCarried, castSubtitleWanted, withCastSubtitle } from "./castSubtitles";
 import { describeLumenServerPlayback, receivedOf } from "@/lib/lumenPanel";
 import { formatTime } from "@/lib/playerClock";
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
@@ -119,6 +120,7 @@ import {
 import {
   bufferedText,
   lumenAudioFields,
+  lumenCastSubtitleFields,
   lumenContext,
   lumenErrorFields,
   lumenFallbackFields,
@@ -161,7 +163,7 @@ async function fetchVerdict(itemId: string, s: string, audio: number | null, mux
   const params = new URLSearchParams({ s, wait: String(VERDICT_WAIT_MS), tv: "1" });
   if (audio !== null) params.set("audio", String(audio));
   if (mux) params.set("mux", "1");
-  // « Améliorer les dialogues » (§191) : la liste maître des rendus traités par le serveur, s'il peut.
+  // « Améliorer les dialogues » (§193) : la liste maître des rendus traités par le serveur, s'il peut.
   if (dialogue) params.set("dialogue", dialogue);
   try {
     const res = await fetch(`/api/lumen/${itemId}/eligibility?${params}`, { signal: AbortSignal.timeout(VERDICT_WAIT_MS + 6000) });
@@ -230,7 +232,7 @@ interface PendingAudio {
   keepPaused: boolean;
   /** La première image de la nouvelle séance (ms depuis l'adresse posée). */
   pictureMs?: number;
-  /** « Améliorer les dialogues » (§191) : la force servie par la liste rouverte, pour la ligne `audio`. */
+  /** « Améliorer les dialogues » (§193) : la force servie par la liste rouverte, pour la ligne `audio`. */
   dialogue?: DialogueMode;
 }
 
@@ -411,9 +413,14 @@ export function LumenServerHost({
   const castAttemptedRef = useRef(false);
   const lastPlaybackOptsRef = useRef<{ resumeAt?: number } | undefined>(undefined);
   const pendingAudioRef = useRef<PendingAudio | null>(null);
+  /**
+   * Le sous-titre du téléviseur en train de changer (§191) : la liste rouverte avec `?st=`, en attente de son image.
+   * `keepPaused` : en pause au moment du changement, rouvert en pause (le téléviseur ne doit pas repartir seul).
+   */
+  const pendingCastSubtitleRef = useRef<{ st: number | null; fromSt: number | null; label: string | null; at: number; srcAt: number; keepPaused: boolean } | null>(null);
   const audioSettleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
-   * « Améliorer les dialogues » (§191). `dialogueMode` : le réglage de l'appareil, lu une fois à l'ouverture (un banc
+   * « Améliorer les dialogues » (§193). `dialogueMode` : le réglage de l'appareil, lu une fois à l'ouverture (un banc
    * mesure le chemin sans traitement), puis tenu par le menu. `servedDialogue` : ce que la liste posée sur l'élément
    * sert vraiment — la liste maître des rendus traités par le serveur à cette force (`?dialogue=`), ou null : la liste
    * ordinaire. Les deux diffèrent quand la piste choisie n'a pas de rendu traité (le menu dit alors « Sans effet »).
@@ -732,7 +739,7 @@ export function LumenServerHost({
     restoreRememberedVolume(videoRef.current);
     const open = async () => {
       const prepared = readLumenPrepared(itemId);
-      // « Améliorer les dialogues » allumé sur l'appareil (§191) : la liste des rendus traités par le serveur, demandée
+      // « Améliorer les dialogues » allumé sur l'appareil (§193) : la liste des rendus traités par le serveur, demandée
       // dès le premier verdict ; s'il ne peut pas les servir pour la piste d'ouverture, le lecteur actuel, qui le fait.
       const wantDialogue: LumenDialogueMode | undefined = dialogueModeRef.current === "off" ? undefined : dialogueModeRef.current;
       const [info, state, verdict0, pistes] = await Promise.all([
@@ -770,7 +777,7 @@ export function LumenServerHost({
       }
       if (!verdict.ok) return decline(verdictRefusal(verdict) ?? "refus", true, "éligibilité");
       // Le serveur ne sert pas le traitement pour cette piste (AAC, FLAC, option coupée, serveur saturé) : le lecteur
-      // actuel, qui le fait dans la page — la règle d'avant §191, un déclin prévu.
+      // actuel, qui le fait dans la page — la règle d'avant §193, un déclin prévu.
       if (wantDialogue && !verdict.dialogue?.served) {
         const why = verdict.dialogue && !verdict.dialogue.served ? `${verdict.dialogue.reason}${verdict.dialogue.detail ? ` : ${verdict.dialogue.detail}` : ""}` : "non servi";
         return decline(`améliorer les dialogues : ${why}`, true, "dialogues");
@@ -929,6 +936,20 @@ export function LumenServerHost({
           finishAudioSwitch(video);
         }
       }
+      // Le sous-titre du téléviseur changé (§191) : la ligne `cast` qui le dit, avec le temps de la réouverture.
+      const casting = pendingCastSubtitleRef.current;
+      if (casting) {
+        pendingCastSubtitleRef.current = null;
+        if (casting.keepPaused) video.pause();
+        reportPlayback(
+          "cast",
+          lumenCastSubtitleFields(
+            logContext.current,
+            { subtitles: casting.label, st: casting.st, fromSt: casting.fromSt, at: casting.at, tookMs: Date.now() - casting.srcAt, pictureMs: Date.now() - casting.srcAt },
+            lumenSession
+          )
+        );
+      }
       const first = !pictureRef.current;
       pictureRef.current = true;
       sessionPlayedRef.current = true;
@@ -966,6 +987,20 @@ export function LumenServerHost({
         if (code !== 4 && retryOpening(`erreur ${mediaError ?? "?"} avant l'image`)) return;
         fallToRef.current("natif", `refus de l'élément avant l'image (${mediaError ?? "?"})`, { stage: "élément", mediaError });
         return;
+      }
+      // Le sous-titre du téléviseur (§191) : la liste rouverte avec `?st=` échoue avant son image — dit, puis la
+      // règle d'après l'image (`recover`, un élément neuf ; l'effet de la diffusion reposera `st` s'il le faut).
+      const castingSubtitle = pendingCastSubtitleRef.current;
+      if (castingSubtitle && !firstPictureHere) {
+        pendingCastSubtitleRef.current = null;
+        reportPlayback(
+          "cast",
+          lumenCastSubtitleFields(
+            logContext.current,
+            { subtitles: castingSubtitle.label, st: castingSubtitle.st, fromSt: castingSubtitle.fromSt, at: castingSubtitle.at, tookMs: Date.now() - castingSubtitle.srcAt, error: mediaError ?? "erreur" },
+            lumenSession
+          )
+        );
       }
       // Une réouverture pour changer de piste qui échoue avant son image : dite telle quelle, puis la règle
       // d'après l'image — un élément neuf, sur la piste voulue (`currentAudioRef`).
@@ -1017,7 +1052,7 @@ export function LumenServerHost({
           lumenSession
         )
       );
-      // Un changement de force (« Améliorer les dialogues », §191) garde la piste : dit comme tel dans le panneau.
+      // Un changement de force (« Améliorer les dialogues », §193) garde la piste : dit comme tel dans le panneau.
       if (done.from === done.to && done.dialogue) {
         const name = done.dialogue === "strong" ? "player.dialogue.further" : done.dialogue === "on" ? "player.dialogue.enhance" : "player.dialogue.off";
         noteEventRef.current(t("player.info.lumen.eventDialogue", { mode: t(name), ms: Date.now() - done.startedAt0 }));
@@ -1029,7 +1064,7 @@ export function LumenServerHost({
       if (switching?.pictureMs !== undefined && video.currentTime - switching.at >= 0.3) finishAudioSwitch(video);
     };
     const playAllowingGesture = () => {
-      if (pendingAudioRef.current?.keepPaused) return;
+      if (pendingAudioRef.current?.keepPaused || pendingCastSubtitleRef.current?.keepPaused) return;
       video.play().catch((e: unknown) => {
         // La politique de lecture automatique d'iOS (une page rechargée n'a pas de geste) : pause propre, un appui.
         if (e instanceof DOMException && e.name === "NotAllowedError") setLoading(false);
@@ -1366,7 +1401,7 @@ export function LumenServerHost({
   const reopenForAudio = useCallback(
     (change: Omit<PendingAudio, "startedAt" | "srcAt" | "frozen" | "keepPaused">, opts: { master?: string } = {}) => {
       const video = videoRef.current;
-      // `master` : une autre liste maître (« Améliorer les dialogues » allumé ou coupé, §191) ; sinon celle posée.
+      // `master` : une autre liste maître (« Améliorer les dialogues » allumé ou coupé, §193) ; sinon celle posée.
       const master = opts.master ?? masterRef.current;
       if (!video || !master || closedRef.current || fellRef.current) return;
       const target = new URL(master, window.location.href);
@@ -1402,6 +1437,69 @@ export function LumenServerHost({
     [itemId, lumenSession]
   );
 
+  /**
+   * Le sous-titre du téléviseur (§191) : la liste maître rouverte **sur le même élément** (celui que la route AirPlay
+   * tient), à la position, avec `?st=<index>` — ou sans, pour le retirer. Le téléviseur reçoit la nouvelle adresse et
+   * dessine le rendu qu'elle porte (DEFAULT=YES). Les `<track>` de la page sont retirés avant que l'adresse ne soit
+   * posée (un `<track>` présent à ce moment fait refuser l'élément, code 4) et reviennent à l'image suivante, comme à
+   * l'ouverture. Ni image figée ni ligne `rebuild` : le téléphone n'est qu'une télécommande, et ce n'est pas une panne.
+   */
+  const reopenForCastSubtitle = useCallback(
+    (st: number | null, label: string | null) => {
+      const video = videoRef.current;
+      const master = masterRef.current;
+      if (!video || !master || closedRef.current || fellRef.current || pendingAudioRef.current) return;
+      const at = positionNow();
+      const next = withCastSubtitle(master, st);
+      pendingCastSubtitleRef.current = { st, fromSt: castSubtitleCarried(master), label, at, srcAt: Date.now(), keepPaused: video.paused };
+      masterRef.current = next;
+      srcSetRef.current = { at: Date.now(), resumeAt: at, fragment: at > 0 };
+      lastKnownTime.current = at;
+      setTracksFor(-1);
+      setSrc(withStartFragment(next, at));
+    },
+    [positionNow]
+  );
+
+  // ── Le sous-titre au téléviseur (§191) ─────────────────────────────────────────────────────────────
+  // Pendant une diffusion, l'adresse que tient l'élément porte le sous-titre choisi (`?st=`), et rien d'autre ; hors
+  // diffusion, on n'y touche pas (une adresse qui porte encore `st` après la fin d'une diffusion est sans effet : ses
+  // pistes du flux restent éteintes, ci-dessous, et la prochaine réouverture la garde telle quelle).
+  const castWanted = castSubtitleWanted(currentSubtitleId, externalSubtitleTracks);
+  const castWantedLabel = castWanted === null ? null : (externalSubtitleTracks.find((st) => st.index === castWanted)?.label ?? null);
+  /** Le téléviseur dessine un sous-titre du flux : la diffusion établie, sur une adresse qui en porte un. */
+  const tvShowsSubtitle = castActive && castSubtitleCarried(src) !== null;
+  const carriedSubtitle = castSubtitleCarried(src);
+  /** Pour le panneau : l'étiquette du sous-titre que le téléviseur dessine, ou null. */
+  const tvSubtitleLabel = tvShowsSubtitle && carriedSubtitle !== null ? (externalSubtitleTracks.find((st) => st.index === carriedSubtitle)?.label ?? String(carriedSubtitle)) : null;
+  useEffect(() => {
+    if (!castActive || !pictureRef.current || pendingCastSubtitleRef.current) return;
+    if (castSubtitleCarried(masterRef.current) === castWanted) return;
+    // Hors du corps de l'effet (la règle du compilateur React : pas d'état posé pendant l'effet).
+    const timer = setTimeout(() => reopenForCastSubtitle(castWanted, castWantedLabel), 0);
+    return () => clearTimeout(timer);
+  }, [castActive, castWanted, castWantedLabel, reopenForCastSubtitle, src]);
+  // Les pistes du flux (le rendu de sous-titres d'une adresse `?st=`) : `showing` pendant la diffusion — la sélection
+  // du lecteur de WebKit, que la route AirPlay porte au téléviseur avec l'adresse —, `disabled` partout ailleurs, pour
+  // que Safari ne dessine jamais rien sous notre calque. Reposés à chaque piste ajoutée et à chaque chargement.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !src) return;
+    const apply = () => {
+      applyInbandModes(video, tvShowsSubtitle);
+    };
+    apply();
+    const list = video.textTracks as (TextTrackList & EventTarget) | undefined;
+    list?.addEventListener?.("addtrack", apply);
+    video.addEventListener("loadedmetadata", apply);
+    video.addEventListener("loadeddata", apply);
+    return () => {
+      list?.removeEventListener?.("addtrack", apply);
+      video.removeEventListener("loadedmetadata", apply);
+      video.removeEventListener("loadeddata", apply);
+    };
+  }, [src, videoKey, tvShowsSubtitle]);
+
   const changeAudio = useCallback(
     (id: number) => {
       const video = videoRef.current;
@@ -1417,7 +1515,7 @@ export function LumenServerHost({
       const fromTrack = from === null ? "" : (audioLabelsRef.current.get(from) ?? String(from));
       const toTrack = audioLabelsRef.current.get(id) ?? String(id);
       const served = servedDialogueRef.current;
-      // Sous « Améliorer les dialogues » servi (§191), la nouvelle piste passe traitée si elle a son rendu, sinon telle
+      // Sous « Améliorer les dialogues » servi (§193), la nouvelle piste passe traitée si elle a son rendu, sinon telle
       // quelle — la liste maître la sert ainsi, et le menu dit « Sans effet sur cette piste audio ».
       const processing = processingOf(facts, served);
       const dialogue = served ?? undefined;
@@ -1604,15 +1702,17 @@ export function LumenServerHost({
   );
 
   // « Diffuser » (§186) : AirPlay depuis l'élément même — le sélecteur ouvert dans le geste, et l'Apple TV lit l'adresse
-  // munie du laissez-passer (`tv.{jeton}`), à la position, sans changer de lecteur. Les sous-titres ne passent pas au
-  // téléviseur par ce chemin (ce sont des `<track>` de la page, pas des rendus de la liste) : avec un sous-titre
-  // affiché, ou sans sélecteur AirPlay (un autre navigateur), le lecteur serveur prend la main pour diffuser comme
-  // avant — `cast: true`, un choix et non un échec.
+  // munie du laissez-passer (`tv.{jeton}`), à la position, sans changer de lecteur. Un sous-titre de texte affiché va au
+  // téléviseur dans le flux (§191) : la liste rouverte avec `?st=` dès la route établie (`reopenForCastSubtitle`). Une
+  // génération en cours (pas encore de fichier ; les pistes en images ne sont pas au menu de ce chemin), ou sans
+  // sélecteur AirPlay (un autre navigateur) : le lecteur serveur prend la main pour diffuser comme avant —
+  // `cast: true`, un choix et non un échec.
+  // Deux sous-titres : le téléviseur ne montre que le principal (comme le lecteur serveur, qui n'en incruste qu'un).
   const requestCast = useCallback(() => {
     const video = videoRef.current as (HTMLVideoElement & { webkitShowPlaybackTargetPicker?: () => void }) | null;
     const subtitle = currentSubtitleRef.current;
     const tokenized = masterRef.current?.includes("/tv.") === true;
-    if (video && tokenized && subtitle === null && secondSubtitleRef.current === null && typeof video.webkitShowPlaybackTargetPicker === "function") {
+    if (video && tokenized && castStaysOnLumen(subtitle, externalSubtitleTracks) && typeof video.webkitShowPlaybackTargetPicker === "function") {
       try {
         video.webkitShowPlaybackTargetPicker();
         return;
@@ -1657,7 +1757,7 @@ export function LumenServerHost({
   );
 
   /**
-   * « Améliorer les dialogues » (§191) : le serveur traite le son (`DialogueEnhancer` sur son PCM, encodé en E-AC-3) et
+   * « Améliorer les dialogues » (§193) : le serveur traite le son (`DialogueEnhancer` sur son PCM, encodé en E-AC-3) et
    * sert ses rendus par une autre liste maître (`?dialogue=on|strong`). Changer de force, c'est changer de liste — la
    * réouverture d'un changement de piste (§185) : même élément, image d'avant figée, `prepare` lancé avant, une ligne
    * `audio` (`dialogue`, `processing`). Allumer demande d'abord le verdict (la piste a-t-elle son rendu, le serveur
@@ -1750,7 +1850,7 @@ export function LumenServerHost({
   }, [showPlaybackInfo, itemId, lumenSession]);
 
   // Le traitement s'applique-t-il à ce qu'on entend ? Coupé, la question ne se pose pas ; allumé, seulement si la liste
-  // posée sert les rendus traités et que la piste choisie en a un (§191).
+  // posée sert les rendus traités et que la piste choisie en a un (§193).
   const dialogueApplies = dialogueMode === "off" || (servedDialogue !== null && !!panel?.choices.find((a) => a.number === currentAudioId)?.dialogue);
 
   const panelData = useMemo<PlaybackPanelData | null>(() => {
@@ -1772,6 +1872,8 @@ export function LumenServerHost({
         server: serverStats,
         events,
         airplay: castActive,
+        // Le sous-titre que le téléviseur dessine depuis le flux (§191) : celui que porte l'adresse tenue.
+        airplaySubtitles: castActive ? tvSubtitleLabel : undefined,
       },
       t
     );
@@ -1779,7 +1881,7 @@ export function LumenServerHost({
       ...described,
       report: { error: null, elapsedMs: null, title, itemId, file: { master: panel.master.replace(/\/tv\.[^/]+\//, "/tv.…/"), version: panel.version }, pathReason: t("player.info.lumen.name"), diagnostics: {}, running: true },
     };
-  }, [panel, title, itemId, lumenSession, currentAudioId, servedDialogue, received, serverStats, events, castActive, t]);
+  }, [panel, title, itemId, lumenSession, currentAudioId, servedDialogue, received, serverStats, events, castActive, tvSubtitleLabel, t]);
 
   function toggleMiniPlay() {
     const video = videoRef.current;
@@ -1852,13 +1954,13 @@ export function LumenServerHost({
       </div>
       {/* Les sous-titres, toujours par le calque de la page (§190) : jamais en mini-lecteur ni sous l'écran d'erreur.
           Deux sous-titres ; sinon l'aide d'un passage rejoué ; sinon une génération en cours ; sinon la piste choisie. */}
-      {!isMini && !error && dualActive && (
+      {!isMini && !error && !tvShowsSubtitle && dualActive && (
         <SubtitleLayer dual primary={subtitleLines.primary} second={subtitleLines.second} style={subtitleStyle} chromeEdges={chromeEdges} />
       )}
-      {!isMini && !error && !dualActive && replayId === null && isGeneratingTrack(currentSubtitleId) && subtitleGen.line && (
+      {!isMini && !error && !tvShowsSubtitle && !dualActive && replayId === null && isGeneratingTrack(currentSubtitleId) && subtitleGen.line && (
         <SubtitleLayer primary={subtitleGen.line.text} primaryNotice={subtitleGen.line.notice} style={subtitleStyle} chromeEdges={chromeEdges} />
       )}
-      {!isMini && !error && !dualActive && (replayId !== null || !isGeneratingTrack(currentSubtitleId)) && subtitleLines.primary && (
+      {!isMini && !error && !tvShowsSubtitle && !dualActive && (replayId !== null || !isGeneratingTrack(currentSubtitleId)) && subtitleLines.primary && (
         <SubtitleLayer primary={subtitleLines.primary} style={subtitleStyle} chromeEdges={chromeEdges} />
       )}
       {warning && !error && !isMini && <NativeWarning text={warning} />}
@@ -1917,7 +2019,7 @@ export function LumenServerHost({
           replaySubtitle={replaySubtitle}
           subtitleGeneration={generationMenuProps}
           frameFit={frameFitState.available ? { on: frameFitState.on, onChange: frameFitState.setOn } : undefined}
-          // « Améliorer les dialogues » (§191) : la force de l'appareil ; « Sans effet » quand la liste sert le traitement mais que
+          // « Améliorer les dialogues » (§193) : la force de l'appareil ; « Sans effet » quand la liste sert le traitement mais que
           // la piste choisie n'a pas de rendu traité (elle est servie telle quelle).
           dialogue={bench ? undefined : { mode: dialogueMode, applies: dialogueApplies, onChange: chooseDialogue }}
           hidden={!!error}

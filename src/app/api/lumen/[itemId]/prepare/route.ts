@@ -49,7 +49,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const session = await lumenAccess(req, itemId);
   if (session instanceof NextResponse) return session;
   const body = (await req.json().catch(() => null)) as { audio?: unknown; position?: unknown; s?: unknown; cut?: unknown; target?: unknown; convPool?: unknown; convCold?: unknown; dialogue?: unknown } | null;
-  // `dialogue: "on" | "strong"` (§191) : le segment de reprise du rendu « dialogues » de la piste, traité d'avance.
+  // `dialogue: "on" | "strong"` (§193) : le segment de reprise du rendu « dialogues » de la piste, traité d'avance.
   const dialogue = parseDialogueMode(typeof body?.dialogue === "string" ? body.dialogue : body?.dialogue === undefined || body?.dialogue === null ? undefined : "?");
   if (dialogue === null) return goneResponse("lumen-inconnu", "Mode « dialogues » inconnu");
   const audio = body?.audio;
@@ -103,7 +103,7 @@ async function warm(
     const engine = lumenServerEngine();
     const version = lumenVersionOf(index);
     const n = segmentAt(index, position);
-    // Le rendu que la liste maître désignera : « dialogues » quand il est demandé et que la piste en a un (§191).
+    // Le rendu que la liste maître désignera : « dialogues » quand il est demandé et que la piste en a un (§193).
     const track = audioTrack !== null ? index.audio.find((a) => a.number === audioTrack) : undefined;
     const processed = dialogue && track ? dialogueRendition(track, dialogue) : null;
     await Promise.all([

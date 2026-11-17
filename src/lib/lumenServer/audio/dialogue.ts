@@ -1,5 +1,5 @@
 // « Améliorer les dialogues » dans Lumen serveur : le traitement du lecteur actuel, fait par le serveur, segment par
-// segment, sans que les segments cessent d'être des fonctions du fichier (DECISIONS.md §191).
+// segment, sans que les segments cessent d'être des fonctions du fichier (DECISIONS.md §193).
 //
 // Code pur, sans Node : importé par le fil principal, le fil de calcul (`jobs.ts`, travail `dialogue`), le banc et
 // les tests.
@@ -54,7 +54,7 @@ export const LUMEN_DIALOGUE_VERSION = 1;
 /**
  * Le pré-roulement du traitement, en échantillons à 48 kHz : 6 s. Le plus lent des états (la remontée du niveleur,
  * 800 ms) y décroît de e^(−7,5) ≈ 5,5·10⁻⁴ : une remontée de 9 dB partie de zéro y est à 0,005 dB de celle d'un
- * traitement continu. Banc du 17/11/2026 sur de vrais films : voir DECISIONS §191.
+ * traitement continu. Banc du 17/11/2026 sur de vrais films : voir DECISIONS §193.
  */
 export const DIALOGUE_PREROLL = 6 * CONVERT_RATE;
 

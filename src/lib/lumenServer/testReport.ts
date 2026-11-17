@@ -229,6 +229,8 @@ function runOf(raw: unknown, user: string): Record<string, unknown> {
         pick(x, { at: (y) => num(y, 1e6), ms: (y) => num(y, 1e8), afterSeek: bool, until: oneOf(FREEZE_ENDS) })
       ),
     audioTracks: (v) => list(v, 16).map((x) => text(x, 160)).filter((x) => x !== null),
+    // Les pistes de texte de l'élément (§191, levier « sous-titres dans la liste ») : `genre:langue:étiquette:mode`.
+    textTracks: (v) => list(v, 8).map((x) => text(x, 120)).filter((x) => x !== null),
     audioSwitches: (v) =>
       list(v, 12).map((x) =>
         pick(x, {

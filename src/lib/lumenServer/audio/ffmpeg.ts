@@ -49,7 +49,7 @@ export type FfmpegDetection =
       reference: Record<string, Uint8Array>;
       /**
        * Décode-t-il l'AC-3 et l'E-AC-3 (`ac3`, `eac3`, démultiplexeur `eac3`) ? Pour les rendus « dialogues » des
-       * pistes Dolby copiées seulement (§191) : pas une condition de la conversion. Absent : non.
+       * pistes Dolby copiées seulement (§193) : pas une condition de la conversion. Absent : non.
        */
       dolby?: boolean;
       detectedAt: number;

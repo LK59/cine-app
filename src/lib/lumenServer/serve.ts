@@ -43,6 +43,8 @@ import { cuttingOfTag, LUMEN_FORMAT_VERSION, parseLumenPath, segmentName, type L
 import { lumenEligibility } from "./eligibility";
 import { parseDialogueMode } from "./audio/dialogue";
 import { chronoEntry, isPlaybackId, noteBuilt, noteConvertBusy, noteConverted, noteRefused, noteRequest, noteSent, noteTrace, playbackOf, serverClockMs, type ChronoEntry, type PlaybackStats } from "./playbackStats";
+import { masterWithSubtitles, serveSubtitleRendition, SUBTITLE_HEADER } from "./subtitleServe";
+import { parseSubtitlePath } from "./subtitles";
 import { masterTrialOptions, muxedInit, muxedMaster, muxedMediaPlaylist, muxedSegment, muxVersion, parseMuxedPath, splitMuxTag, withMasterTrials, type MuxedPath } from "./trials";
 import {
   defaultAudioTrack,
@@ -88,7 +90,7 @@ async function labelsFor(req: NextRequest): Promise<LabelOptions> {
   return { locale, canaux: (n) => t("player.trackLabel.channels", { n }), piste: (n) => t("player.trackLabel.track", { n }) };
 }
 
-async function playlistResponse(req: NextRequest, text: string, serverTiming: string): Promise<NextResponse> {
+export async function playlistResponse(req: NextRequest, text: string, serverTiming: string): Promise<NextResponse> {
   const encoded = await encodePlaylist(Buffer.from(text, "utf-8"), req.headers.get("accept-encoding"));
   return new NextResponse(new Uint8Array(encoded.body), {
     headers: { "Content-Type": PLAYLIST_TYPE, "Cache-Control": PLAYLIST_CACHE, "Server-Timing": serverTiming, ...encoded.headers },
@@ -186,7 +188,9 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
   if (!cutting) return goneResponse("lumen-perime", "Autre version du format", { format: LUMEN_FORMAT_VERSION });
   const name = nameParts.join("/");
   const muxed = mux ? parseMuxedPath(name) : null;
-  if (!parseLumenPath(name) && !muxed) return goneResponse("lumen-inconnu", "Nom inconnu");
+  // Les rendus de sous-titres (§191, `subtitles.ts`) : des noms à part, jamais vus du moteur.
+  const subtitle = parseSubtitlePath(name);
+  if (!parseLumenPath(name) && !muxed && !subtitle) return goneResponse("lumen-inconnu", "Nom inconnu");
 
   const context = { itemId, s, name };
   let found: Awaited<ReturnType<typeof lumenIndexOf>>;
@@ -207,13 +211,25 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
     if (chrono && response.status !== 200) chrono.status = response.status;
     return response;
   };
-  const parsed = parseLumenPath(name) ?? { kind: muxed!.kind };
-  noteRequest(stats, parsed.kind);
+  // Les sous-titres ne comptent pas au relevé : ses compteurs (listes, segments) sont ceux de l'image et du son.
+  const parsed = parseLumenPath(name) ?? (muxed ? { kind: muxed.kind } : null);
+  if (parsed) noteRequest(stats, parsed.kind);
   if (current !== version) {
     noteRefused(stats, "stale");
     return answer(goneResponse("lumen-perime", "Le fichier a changé", { version: current }));
   }
   if (index.refusal) return answer(refusedResponse(index.refusal));
+  if (subtitle) {
+    const response = await serveSubtitleRendition(req, {
+      path: subtitle,
+      index,
+      session,
+      itemId,
+      playlistResponse: (request, text) => playlistResponse(request, text, timing({ app: performance.now() - receivedAt })),
+    });
+    noteReady(chrono);
+    return answer(response);
+  }
   const engine = lumenServerEngine();
   const path = muxed ? (muxedServed(index, muxed) ? muxed : null) : engine.resolve(index, name);
   if (!path) {
@@ -223,7 +239,7 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
   const idxMs = performance.now() - receivedAt;
 
   try {
-    const resolved = { engine, index, version: ruled, stats, receivedAt, idxMs, context, chrono, session: playbackKey(session.u, s), television, itemId };
+    const resolved = { engine, index, version: ruled, stats, receivedAt, idxMs, context, chrono, session: playbackKey(session.u, s), account: session, television, itemId };
     return answer(muxed ? await serveMuxed(req, { ...resolved, path: muxed }) : await serveResolved(req, { ...resolved, path: path as LumenPath, mux }));
   } catch (error) {
     const { response, kind, code } = lumenErrorResponse(error, context);
@@ -354,6 +370,8 @@ async function serveResolved(
     /** Un téléviseur (§186) : la position de ses segments vidéo, rapportée quand la page s'est tue. */
     television?: LumenTvPass | null;
     itemId?: string;
+    /** Le compte (la session, ou l'administrateur du laissez-passer) : Jellyfin lu pour lui, pour `?st=` (§191). */
+    account?: Pick<SessionPayload, "jfId">;
   }
 ): Promise<NextResponse> {
   const { engine, index, path, stats } = r;
@@ -368,7 +386,7 @@ async function serveResolved(
       noteMediaRead();
       // `?groupes=codec` : l'ancienne forme (un groupe par codec), un essai de `/lumen-test` (§185).
       const perCodecGroups = req.nextUrl.searchParams.get("groupes") === "codec";
-      // `?dialogue=on|strong` (§191) : les rendus « dialogues » à la place des rendus ordinaires. Mal formé : 410, comme
+      // `?dialogue=on|strong` (§193) : les rendus « dialogues » à la place des rendus ordinaires. Mal formé : 410, comme
       // une piste mal formée ; une piste sans ce rendu garde le sien (l'hôte le sait par le verdict).
       const dialogue = parseDialogueMode(req.nextUrl.searchParams.get("dialogue"));
       if (dialogue === null) return goneResponse("lumen-inconnu", "Mode « dialogues » inconnu");
@@ -376,8 +394,13 @@ async function serveResolved(
       // Les essais de la seule liste maître (étape 3e, `trials.ts`) : sans `?start=` ni `?bw=`, le texte de la règle.
       text = withMasterTrials(text, masterTrialOptions(req.nextUrl.searchParams));
       if (r.mux && audioTrack !== null) text = muxedMaster(text, audioTrack);
+      // `?st=N` (§191) : le rendu de sous-titres que le téléviseur doit dessiner. Sans lui, la liste d'avant à l'octet près.
+      const subtitled = await masterWithSubtitles(req, text, { session: r.account ?? {}, itemId: r.itemId ?? "" });
+      if (!subtitled) return goneResponse("lumen-inconnu", "Sous-titre mal formé");
       noteReady(r.chrono);
-      return playlistResponse(req, text, timing({ app: performance.now() - r.receivedAt, idx: r.idxMs }));
+      const response = await playlistResponse(req, subtitled.text, timing({ app: performance.now() - r.receivedAt, idx: r.idxMs }));
+      if (subtitled.outcome) response.headers.set(SUBTITLE_HEADER, subtitled.outcome);
+      return response;
     }
     case "playlist": {
       const text = engine.playlist(index, path.rendition);

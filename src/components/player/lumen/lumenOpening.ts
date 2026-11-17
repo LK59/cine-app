@@ -32,7 +32,7 @@ export interface LumenAudioChoice {
   codec: string;
   /** Servie convertie (§161) : la cible (`eac3-640-51`), sinon null — copiée telle quelle. */
   converted: string | null;
-  /** A ses rendus « Améliorer les dialogues » (§191) : leur cible, sinon null — le serveur ne la traite pas. */
+  /** A ses rendus « Améliorer les dialogues » (§193) : leur cible, sinon null — le serveur ne la traite pas. */
   dialogue: string | null;
 }
 
@@ -40,7 +40,7 @@ const layoutOf = (target: string) => (/-51$/.test(target) ? "5.1" : /-20$/.test(
 
 /**
  * Ce que le serveur livre d'une piste, en mots, pour la ligne `audio` et le panneau : copiée, ou convertie et vers
- * quoi ; sous « Améliorer les dialogues » (§191), traitée par le serveur à cette force — ou copiée/convertie sans
+ * quoi ; sous « Améliorer les dialogues » (§193), traitée par le serveur à cette force — ou copiée/convertie sans
  * traitement quand la piste n'a pas de rendu traité (la liste maître la sert alors telle quelle).
  */
 export function processingOf(track: Pick<LumenAudioChoice, "codec" | "converted"> & Partial<Pick<LumenAudioChoice, "dialogue">>, dialogue?: LumenDialogueMode | null): string {
@@ -182,7 +182,7 @@ export function parseMasterAudio(text: string): MasterAudio[] {
     const a = attributes(line.slice("#EXT-X-MEDIA:".length));
     if (a.get("TYPE") !== "AUDIO") continue;
     const uri = a.get("URI") ?? "";
-    // `a12.m3u8`, convertie `a12x{cid}.m3u8` (§161), traitée `a12d1x{cid}.m3u8` (§191) ; l'essai du son multiplexé
+    // `a12.m3u8`, convertie `a12x{cid}.m3u8` (§161), traitée `a12d1x{cid}.m3u8` (§193) ; l'essai du son multiplexé
     // (`vm12.m3u8`) n'a pas d'URI pour sa piste par défaut : sans numéro lisible, la piste n'est pas reliable — le
     // changement passera par la réouverture.
     const number = /(?:^|\/)a(\d+)(?:d[12])?(?:x[0-9a-f]{8})?\.m3u8$/.exec(uri)?.[1];

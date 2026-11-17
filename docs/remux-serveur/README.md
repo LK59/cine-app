@@ -960,7 +960,7 @@ bouton AirPlay tend au téléviseur ; les URI relatives des listes en héritent.
 sa portée `lumen`, un administrateur, un titre, une lecture, la session vivante, six heures. Proxy et route posent la
 même question (`lumenTvPassFor` / `verifyLumenTvPass`) ; une requête avec cookie passe en plus le contrôle ordinaire.
 Chaque segment vidéo demandé sans cookie donne sa position au relais (`castProgress`). Avec un sous-titre affiché,
-« Diffuser » passe au lecteur serveur, qui les porte au téléviseur.
+« Diffuser » passait au lecteur serveur ; depuis §191, un sous-titre de texte va au téléviseur dans le flux (section 8).
 
 ### 3. « Générer des sous-titres » (§187)
 
@@ -980,7 +980,39 @@ Audio est suspendu en arrière-plan — ce que ce chemin est venu régler. Une p
 traitement : le traitement validé est en TypeScript, avec une mémoire de plusieurs secondes, alors qu'un segment doit
 être une fonction du fichier — un pré-roulement et une preuve de jointure à faire, toutes les pistes copiées à convertir.
 Fait à la place : le réglage choisi dans ce lecteur rend la lecture au lecteur actuel à la position, et `lumenWanted`
-décline ce chemin tant que le réglage est allumé sur l'appareil.
+décline ce chemin tant que le réglage est allumé sur l'appareil. **Remplacé le même jour par la voie serveur**, ci-dessous
+(« Améliorer les dialogues par le serveur », §193) ; le retour au lecteur actuel ne reste que quand le serveur ne peut pas.
+
+### « Améliorer les dialogues » par le serveur (17/11/2026, DECISIONS §193)
+
+**Ce qui est fait.** Le traitement n'est pas traduit en filtres ffmpeg : c'est `DialogueEnhancer` lui-même (le code du
+lecteur actuel, §68 v2), exécuté par un fil de calcul sur le PCM que le ffmpeg de l'image décode et replie (`panFor`),
+puis réencodé en E-AC-3 vers la cible de la conversion. Le binaire n'a que 31 filtres (ni égaliseur ni compresseur), et
+trois étapes — le détecteur de parole qui pilote le retrait du fond, le fond plafonné relativement à la voix mise en
+forme, le niveleur qui ne fait que remonter — n'ont pas d'équivalent filtre : une traduction aurait été un autre son.
+
+| Étape du lecteur actuel | Ici |
+|---|---|
+| décodage | ffmpeg, le décodeur de la conversion (§161) ; l'AC-3/E-AC-3 copiée par la voie `dolby` |
+| repli 7.1 → 5.1, 3/4/5/7 canaux → L R C (`fold`) | `pan` de `panFor` (la même règle) |
+| égalisation, gains, niveleur, plafond, détecteur, retrait, fond relatif, compresseur du fond, deux limiteurs | `DialogueEnhancer` tel quel, `DIALOGUE_TUNING` tel quel ; un mono traité en mono |
+| encodeur AAC/Opus de la page | E-AC-3 640 kb/s 5.1 / 256 kb/s 2.0 (§161) |
+
+**La jointure.** Chaque segment est traité par un `DialogueEnhancer` neuf depuis **6 s avant sa fenêtre**, le
+pré-roulement jeté, puis encodé seul : il ne dépend que du fichier, quelle que soit la tâche qui l'a fait. Le banc
+(`lumen-dialogue-bench.spec.ts`) le vérifie sur huit fichiers réels, 16 pistes, les deux forces : segments de l'avance et
+segments seuls identiques à l'octet (6/6 partout, après avoir décodé l'AC-3/E-AC-3 par segment — son décodeur tire un
+tramage qui dépend de son départ) ; écart au traitement continu, avant l'encodeur, ≤ −100 dBFS à 6 s (≤ −144 en 5.1 ;
+−19 à −150 à 2 s, −62 à −131 à 4 s) ; après l'encodeur, même rapport signal/écart qu'un seul encodage continu ; aucun
+clic aux jointures (rapport 0,99 à 1,24 contre l'encodage continu) ; niveaux par canal (`astats`) égaux à ceux de la
+chaîne du lecteur actuel à ±0,01 dB.
+
+**Comment c'est servi.** Une seconde liste maître, `master.m3u8?audio=N&dialogue=on|strong`, sert chaque piste par son
+rendu traité (`a{N}d1x{cid}`, `a{N}d2x{cid}`) à la place du sien ; la liste ordinaire et toutes les adresses d'avant
+sont inchangées à l'octet (pas de nouvelle version de format). Un segment traité est une conversion comme une autre :
+même file (2 processus), même cache, même avance (tâches de 30 s), même admission. L'hôte demande la force de
+l'appareil au verdict ; il change de force par la réouverture d'un changement de piste (§185) ; sans rendu traité ou
+serveur occupé, il rend la main au lecteur actuel (§188).
 
 ### 6. Le panneau technique, le journal (§189)
 
@@ -1008,6 +1040,57 @@ sous-titre choisi, « Diffuser » passe au lecteur serveur, qui le porte au tél
 ligne au-dessus des commandes quand elles sont là, redescendue quand elles partent ; le style du réglage « Sous-titres » ;
 une ligne qui suit bien la parole après ±0,5 s ; deux sous-titres ; un retour −10 s ; une piste son changée (réouverture).
 Le PiP système ne montre pas les sous-titres de ce chemin (comme le lecteur natif : rien n'y est dessiné par Safari).
+
+### 8. AirPlay avec sous-titres : un rendu WebVTT dans la liste maître (§191)
+
+**Ce qui manquait.** L'Apple TV (comme un téléviseur AirPlay d'une autre marque) ne reçoit que l'adresse de la liste
+maître et lit le flux elle-même : les sous-titres de ce chemin, dessinés par la page (section 7), n'y allaient pas, et
+« Diffuser » avec un sous-titre affiché passait au lecteur serveur (un transcodage Jellyfin, sous-titre incrusté).
+
+**Ce qu'on sert.** `master.m3u8?st=<index Jellyfin>` : la liste de la règle, plus **un** rendu
+`TYPE=SUBTITLES,GROUP-ID="subs"` (DEFAULT=YES, AUTOSELECT=YES, FORCED=YES pour un forcé, NAME de `trackLabel.ts`, URI
+relative — le jeton `tv.…` s'hérite) et `SUBTITLES="subs"` sur la variante. Sa liste `s{index}h{empreinte}.m3u8` a les
+EXTINF de la vidéo ; chaque segment `s{index}h{empreinte}/{n}.vtt` porte
+`X-TIMESTAMP-MAP=MPEGTS:round(D × 90 000),LOCAL:00:00:00.000` (les segments fMP4 présentent l'instant du fichier plus
+D) et les répliques qui le recoupent, entières — une réplique à cheval est dans les deux segments. Le texte est le
+WebVTT que Jellyfin tire de la piste, synchro §141 appliquée. Texte seulement ; sans `st`, la liste du format 5 à
+l'octet près. Format **6**.
+
+**Dans l'hôte.** « Diffuser » avec un sous-titre de texte reste sur Lumen serveur ; dès la route établie, la liste est
+rouverte sur le même élément, à la position, avec `?st=` (les `<track>` retirés avant l'adresse, rendus à l'image) ;
+changer de sous-titre pendant la diffusion rouvre avec le nouveau, le retirer rouvre sans. La piste du flux est mise
+en `showing` pendant la diffusion (la sélection que WebKit passe au téléviseur), `disabled` partout ailleurs ; le calque
+de la page se tait pendant que le téléviseur dessine. Ligne `cast` `reason: "sous-titres au téléviseur"`, `subtitles`,
+`st`, `tookMs`, `pictureMs` ; panneau : « Sous-titres au téléviseur ».
+
+**Pourquoi seulement pendant la diffusion.** Dans la page, rien n'a prouvé qu'un rendu de sous-titres ne fait pas
+refuser l'élément (code 4, comme les `<track>` posés avec l'adresse) ni que Safari ne le dessine pas sous le calque.
+Le banc le dit avant qu'on s'y fie : `/lumen-test` → levier « sous-titres dans la liste » (`?st=premier`, la première
+piste de texte du titre).
+
+**À éprouver, dans cet ordre** (option Lumen serveur allumée sur l'iPhone) :
+1. **Le banc, sur l'iPhone, sans AirPlay.** `/lumen-test`, mode manuel, un titre avec des sous-titres de texte (*Ted
+   Lasso* S01E08), levier « sous-titres dans la liste » allumé, Lire. Attendu : l'image comme sans le levier (pas de
+   code 4), et au journal `textTracks` avec une piste `subtitles` du flux. « Envoyer les résultats », puis lire :
+   `jq -c 'select(.kind=="lumen-test") | .runs[]? | select(.mode=="st") | {firstFrameMs, errors, textTracks}' startup.log`.
+   Si la piste est `showing` et que Safari dessine des sous-titres sur l'image : noter, c'est sans conséquence pour
+   l'application (elle ne pose `st` qu'en diffusion et éteint la piste), mais à dire.
+2. **Apple TV, un sous-titre complet.** Lecture dans l'application, sous-titre français choisi, « Diffuser » → l'Apple
+   TV. Attendu : la télévision joue à la position **avec** le sous-titre, calé sur la parole (une réplique ni en avance
+   ni en retard — c'est `X-TIMESTAMP-MAP` qui est éprouvé) ; le téléphone reste sur Lumen serveur (aucune ligne
+   `fallback`). Journal : `cast` « diffusion établie », puis `cast` « sous-titres au téléviseur » avec `subtitles` et
+   `pictureMs`.
+3. **Changer pendant la diffusion.** Depuis le téléphone : un autre sous-titre (anglais), puis aucun. Attendu : la
+   télévision suit en quelques secondes, à la position, sans sortir d'AirPlay ; une ligne `cast` par changement. Si la
+   route AirPlay tombe à la réouverture (`fallback` « fin de diffusion » juste après), le dire : c'est le risque
+   principal de ce choix.
+4. **Un forcé.** Un film en VO avec forcés français (le choix automatique les prend) : les forcés sur la télévision.
+5. **Le centre de contrôle.** Route AirPlay prise depuis le centre de contrôle avec un sous-titre affiché : même
+   résultat qu'au point 2.
+6. **Un téléviseur AirPlay d'une autre marque**, s'il y en a un sous la main : le sous-titre s'affiche-t-il ? (Ces
+   récepteurs n'ont souvent pas de menu de pistes ; DEFAULT=YES est leur seule indication.)
+7. **Fin de diffusion.** Arrêter AirPlay : la lecture continue sur le téléphone, sous-titres par le calque de la page,
+   rien dessiné par Safari en dessous.
 
 ### Un défaut vu en production le 16/11 au soir : *Mr. Robot* S01E03, « code 4 » avant l'image
 
@@ -1080,12 +1163,15 @@ Puis une lecture réelle dans l'application : la ligne `fallback` porte désorma
 3. **AirPlay.** Pendant une lecture, « Diffuser » → choisir l'Apple TV. Attendu : la télévision joue à la position, le
    téléphone devient télécommande ; ligne `cast` « diffusion établie ». Verrouiller le téléphone 5 minutes : la
    télévision continue, et la position avance chez Jellyfin (ligne `cast` `serverRelay: true`). Arrêter depuis le centre
-   de contrôle : ligne `fallback` « fin de diffusion ». Avec un sous-titre affiché, « Diffuser » passe au lecteur serveur.
+   de contrôle : ligne `fallback` « fin de diffusion ». Avec un sous-titre affiché : la section 8 (§191).
 4. **Générer des sous-titres.** Un titre sans sous-titres anglais : menu sous-titres → « Générer » → anglais. Attendu :
    « Préparation des sous-titres… », puis les lignes ; à la fin, la piste « généré » choisie, sans coupure.
 5. **Bandes noires.** Un film en 2.39 avec bandes incrustées : l'interrupteur dans les réglages, l'image agrandie.
-6. **Dialogues.** Réglages → « Améliorer les dialogues » → Améliorer : la lecture repasse au lecteur actuel à la
-   position (ligne `fallback` `planned: true`) ; tant que le réglage reste allumé, Lumen serveur ne s'ouvre plus.
+6. **Dialogues** (§193, `LUMEN_AUDIO_CONVERT` ouvert). Réglages → « Améliorer les dialogues » → Améliorer, puis
+   davantage, puis Désactivé, en lecture : la même image figée ~1 s qu'un changement de piste, la position gardée, une
+   ligne `audio` `dialogue` (`from` = `to`). Au casque, *Interstellar* 2:08:50 et *Tenet* 2:00:20 contre le lecteur
+   actuel au même endroit : le même son attendu ; aucune coupure ni clic toutes les ~4 s. Rouvrir le film avec le
+   réglage allumé : ligne `start` `dialogue`, `dialogueBy: "serveur"`. Une piste AAC (*Bref*) : le lecteur actuel.
 7. **Panneau.** Infos de lecture : « Remux serveur (HLS) », format 5, `cra`, segments reçus qui montent, le relevé du
    serveur ; après un changement de piste par réouverture ou un AirPlay, la ligne d'incident.
 8. ***Mr. Robot* S01E03** : le test du paragraphe précédent.

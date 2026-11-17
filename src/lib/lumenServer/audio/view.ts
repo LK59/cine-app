@@ -28,7 +28,7 @@ export interface ConversionContext {
   reference: Readonly<Record<string, Uint8Array>>;
   /**
    * Le binaire décode-t-il l'AC-3 et l'E-AC-3 (décodeurs `ac3`/`eac3`, démultiplexeur `eac3`) ? Il le faut pour les
-   * rendus « dialogues » des pistes Dolby copiées (§191) ; la conversion de §161 n'en a pas besoin. Absent : non.
+   * rendus « dialogues » des pistes Dolby copiées (§193) ; la conversion de §161 n'en a pas besoin. Absent : non.
    */
   dolby?: boolean;
 }
@@ -105,7 +105,7 @@ export function audioRendition(track: Pick<LumenAudioTrack, "number" | "converte
   return track.converted ? { kind: "audio", track: track.number, conv: track.converted.cid } : { kind: "audio", track: track.number };
 }
 
-// ── « Améliorer les dialogues » (§191) ───────────────────────────────────────
+// ── « Améliorer les dialogues » (§193) ───────────────────────────────────────
 
 /**
  * L'identité d'un rendu « dialogues », huit chiffres hexadécimaux : la conversion (`conversionId` : règles, cible,

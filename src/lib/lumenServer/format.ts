@@ -47,12 +47,18 @@ import type { LumenDialogueMode } from "./audio/dialogue";
  * aucun init ne change d'un octet ; la liste maître d'un fichier à un seul codec non plus. La version monte quand
  * même, parce que la règle de §155 vaut pour toute adresse servie : la même adresse, les mêmes octets.
  *
- * **« Améliorer les dialogues » (§191) ne la fait pas monter.** Il n'ajoute que des adresses neuves (`a3d1x{cid}`,
+ * **6** (17/11/2026, DECISIONS §191) : la liste maître sait porter un rendu de sous-titres WebVTT (`?st=N`, pour
+ * AirPlay), avec ses listes et segments `s{N}h{empreinte}` (`subtitles.ts`). Sans `st`, la liste maître, les listes
+ * média, les init et les segments sont ceux de la 5 à l'octet près ; la version monte pour que la nouvelle forme de
+ * liste maître et les nouveaux noms ne vivent que sous une version qui les connaît. La découpe des sous-titres a sa
+ * propre révision (`LUMEN_SUBTITLE_REVISION`), dans l'empreinte de leurs noms : elle ne fait pas monter celle-ci.
+ *
+ * **« Améliorer les dialogues » (§193) ne la fait pas monter (elle reste à 6).** Il n'ajoute que des adresses neuves (`a3d1x{cid}`,
  * `a3d2x{cid}`, leurs inits et segments, et la liste maître `?dialogue=on|strong`), dont l'identité `cid` porte
  * tout ce qui en fixe les octets (règles du traitement, cible, ffmpeg, moteur JavaScript) ; aucune adresse servie
  * avant ne change d'un octet — la liste maître sans `?dialogue=` comprise (un test le compare).
  */
-export const LUMEN_FORMAT_VERSION = 5;
+export const LUMEN_FORMAT_VERSION = 6;
 
 // ── La règle de découpe ──────────────────────────────────────────────────────
 
@@ -333,7 +339,7 @@ export interface LumenAudioTrack {
    */
   converted?: { target: string; cid: string; channels: number };
   /**
-   * Posé par la vue seulement (`withDialogue`, §191) : les rendus « Améliorer les dialogues » de la piste — le
+   * Posé par la vue seulement (`withDialogue`, §193) : les rendus « Améliorer les dialogues » de la piste — le
    * traitement du lecteur actuel fait par le serveur, encodé vers la cible de la conversion. Absent : la piste n'en a
    * pas (option coupée, ffmpeg absent, AAC, FLAC, PCM, MP4…).
    */
@@ -343,7 +349,7 @@ export interface LumenAudioTrack {
   refusal: LumenRefusal | null;
 }
 
-/** Les deux rendus « dialogues » d'une piste (§191) : une cible, une init, une identité par force. */
+/** Les deux rendus « dialogues » d'une piste (§193) : une cible, une init, une identité par force. */
 export interface LumenDialogueRenditions {
   /** La cible (`eac3-640-51`, `eac3-256-20`) et ses canaux. */
   target: string;
@@ -425,7 +431,7 @@ export interface LumenIndex {
 export type LumenRendition =
   | { kind: "video" }
   /**
-   * `dialogue` (§191) : le rendu « Améliorer les dialogues » de la piste, à cette force — toujours avec `conv`,
+   * `dialogue` (§193) : le rendu « Améliorer les dialogues » de la piste, à cette force — toujours avec `conv`,
    * l'identité de son traitement (`a3d1x{cid}` : `d1` améliorer, `d2` davantage).
    */
   | { kind: "audio"; track: number; conv?: string; dialogue?: LumenDialogueMode };
@@ -468,7 +474,7 @@ export function parseLumenPath(path: string): LumenPath | null {
   if (path === "master.m3u8") return { kind: "master" };
   const tag = (raw: string): LumenRendition | null => {
     if (raw === "v") return { kind: "video" };
-    // `a3`, `a3x{cid}` (convertie, §161), `a3d1x{cid}` / `a3d2x{cid}` (dialogues, §191 — jamais sans identité).
+    // `a3`, `a3x{cid}` (convertie, §161), `a3d1x{cid}` / `a3d2x{cid}` (dialogues, §193 — jamais sans identité).
     const m = /^a([1-9]\d{0,3})(?:(?:d([12]))?x([0-9a-f]{8}))?$/.exec(raw);
     if (!m) return null;
     if (!m[3]) return { kind: "audio", track: Number(m[1]) };
