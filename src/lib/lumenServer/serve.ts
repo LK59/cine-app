@@ -29,6 +29,7 @@
 // Une requête `Range` reçoit le corps entier en 200 : une réponse valide (RFC 9110 §14.2), et la leçon
 // des listes tronquées de Safari (relais de flux) — rien n'est annoncé (`Accept-Ranges` absent).
 
+import { config } from "@/lib/config";
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, type SessionPayload } from "@/lib/auth";
 import { castProgressRelay } from "@/lib/castProgress";
@@ -209,6 +210,8 @@ async function serveChecked(
 ): Promise<NextResponse> {
   const { itemId, version, s } = params;
   const { tvPass, cookied, cast, tvSegment, receivedAt, arrivedAt } = checked;
+  // Coupé par l'exploitant (§194) : un téléviseur aussi — son laissez-passer ne passe pas par `lumenAccess`.
+  if (!config.lumen.serverEnabled) return NextResponse.json({ error: "Lumen serveur coupé sur cette installation", code: "lumen-coupe" }, { status: 409, headers: NO_STORE });
   const session = tvPass && !cookied ? tvSessionOf(tvPass) : await lumenAccess(req, itemId);
   if (session instanceof NextResponse) return session;
   if (!isLumenVersion(version) || !isPlaybackId(s)) return goneResponse("lumen-inconnu", "Adresse inconnue");

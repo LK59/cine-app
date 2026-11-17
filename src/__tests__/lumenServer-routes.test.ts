@@ -247,6 +247,8 @@ describe("les refus d'accès", () => {
   it("Lumen serveur coupé sur l'installation (§194) : 409 `lumen-coupe` partout, même pour l'administrateur — jamais 404", async () => {
     const verdict = await okVerdict(H264);
     const base = baseOf(verdict.master);
+    // L'adresse d'un téléviseur, munie de son laissez-passer (§186), prise avant de couper.
+    const tv = (await (await eligibility(H264, "?s=lect-tv&tv=1")).json()) as { master: string };
     process.env.LUMEN_SERVER_ENABLED = "false";
     try {
       for (const path of [verdict.master, `${base}v.m3u8`, `${base}v/0.m4s`]) {
@@ -256,6 +258,9 @@ describe("les refus d'accès", () => {
       }
       expect((await eligibility(H264)).status).toBe(409);
       expect((await prepare(H264, {})).status).toBe(409);
+      // Un téléviseur, sans cookie, avec son laissez-passer : coupé aussi.
+      expect(tv.master).toMatch(/\/tv\./);
+      expect((await get(tv.master, { cookie: false })).status).toBe(409);
     } finally {
       delete process.env.LUMEN_SERVER_ENABLED;
     }
