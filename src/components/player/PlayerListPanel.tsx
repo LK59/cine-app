@@ -235,7 +235,10 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
             value={sort}
             onChange={(e) => setSort(e.target.value as ListSort)}
             aria-label={t("player.lists.sort")}
-            className="select h-10 shrink-0 text-sm"
+            // `py-0` : à hauteur fixe, WebKit pose le texte d'un <select> sous la marge du haut et le
+            // rogne en bas — « Date d'ajout » coupé à mi-hauteur sur iPhone (chasse du 18/11/2026,
+            // WebKit émulé). Sans marge verticale, il le centre ; Chromium centrait déjà.
+            className="select h-10 shrink-0 py-0 text-sm"
           >
             {LIST_SORTS.map((key) => (
               <option key={key} value={key}>

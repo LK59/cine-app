@@ -179,6 +179,18 @@ describe("PlayerListPanel", () => {
     expect(field.getAttribute("placeholder")).toBe("nav.searchPlaceholder");
   });
 
+  // 18/11/2026 (chasse de nuit, mobile) : à 40 px de haut avec la marge verticale de `select`, WebKit
+  // rognait le bas du tri (« Date d'ajout » coupé à mi-hauteur). Hauteur fixe, donc pas de marge verticale.
+  it("ne met pas de marge verticale dans le tri à hauteur fixe", async () => {
+    renderWith({
+      ...EMPTY_LISTS,
+      toWatch: [{ tmdbId: 603, type: "movie", title: "Matrix", year: 1999, poster: null, libraryId: 42, jellyfinId: null, addedAt: 2 }],
+    });
+    await screen.findByText("Matrix");
+    const sort = screen.getByLabelText("player.lists.sort");
+    expect(sort.className.split(/\s+/)).toEqual(expect.arrayContaining(["h-10", "py-0"]));
+  });
+
   it("filters the list on what is typed, counts included", async () => {
     renderWith({
       ...EMPTY_LISTS,
