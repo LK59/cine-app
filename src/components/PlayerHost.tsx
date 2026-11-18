@@ -515,6 +515,16 @@ function ActivePlayer({
   const [videoKey, setVideoKey] = useState(0);
 
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Un écran d'erreur est-il déjà là ? Lu par le chien de garde des 20 s : un renoncement définitif
+   * (échelle épuisée, essais réseau épuisés) a déjà écrit sa ligne `error` et son message ; le chien de
+   * garde, resté armé, venait 18 s plus tard écrire « pas de première image en 20 s » et remplacer le
+   * message (*Des gens bien* dans Chrome, chasse du 18/11/2026). Il ne fait plus alors que s'arrêter.
+   */
+  const errorShownRef = useRef(false);
+  useEffect(() => {
+    errorShownRef.current = error !== null;
+  }, [error]);
   const [needsReauth, setNeedsReauth] = useState(false);
   const [loading, setLoading] = useState(true);
   // L'ouverture de la lecture couvre-t-elle encore l'écran (`ServerPlayerIntro`) ? La roue et le fil
@@ -983,7 +993,16 @@ function ActivePlayer({
   // (DECISIONS.md §114) ; ce qui est propre au lecteur serveur reste ici — sa garde, et AirPlay.
   const handleClose = useCallback(() => {
     closePlayerSession({
-      claim: () => claimOnce(closedRef),
+      claim: () => {
+        if (!claimOnce(closedRef)) return false;
+        // Une négociation encore en vol est périmée dès la croix, pas au démontage : le lecteur reste
+        // monté le temps du fondu (`PLAYER_CLOSE_MS`), et une réponse arrivée pendant ce temps écrivait
+        // sa ligne `start` *après* le `stop` et lançait la lecture sous l'écran qui s'efface — la séance
+        // ouverte chez Jellyfin n'était jamais refermée (fermé 0,2 s après « Lire », chasse du 18/11/2026).
+        // Périmée, elle passe par `closeOrphan`, comme celle d'un lecteur démonté.
+        playbackGeneration.current += 1;
+        return true;
+      },
       leaveFullscreen: true,
       reportStop: () => reportStop("close"),
       stopReporting: stopPlaybackNow,
@@ -1470,6 +1489,12 @@ function ActivePlayer({
       // retour au premier plan réarme 20 s pleines (voir l'effet `visibilitychange` plus bas).
       const fireWhenShown = () => {
         if (document.visibilityState === "hidden") return;
+        if (errorShownRef.current) {
+          if (linkWatch.current) clearInterval(linkWatch.current);
+          linkWatch.current = null;
+          haltLoading();
+          return;
+        }
         fireWatchdog();
       };
       watchdogFireRef.current = fireWhenShown;
@@ -1669,6 +1694,10 @@ function ActivePlayer({
         lastKnownTime,
         tallyRef,
         escalateToH264Ref,
+        reportFailure: (reason: string) => {
+          if (generation !== playbackGeneration.current) return;
+          reportPlayback("error", serverFailureFields(logContext.current, reason));
+        },
       });
     },
     // t (from useT()) only changes on a locale switch mid-playback, an edge case not worth

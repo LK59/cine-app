@@ -2218,7 +2218,7 @@
       "gaveWay": "Der native Player hat abgegeben: {reason}",
       "paths": {
         "remuxName": "Remuxing",
-        "remuxDetail": "Hardware-Dekodierung, natives HDR",
+        "remuxDetail": "auf dem Gerät dekodiert, ohne Transkodierung",
         "pendingName": "Wird geprüft",
         "pendingDetail": "die Datei hat noch nichts gesagt"
       },

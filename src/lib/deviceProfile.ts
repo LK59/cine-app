@@ -181,6 +181,13 @@ export function buildDeviceProfile(
             ? [{ Condition: "LessThanEqual", Property: "VideoBitDepth", Value: "8", IsRequired: false }]
             : []),
           ...(lighter ? [{ Condition: "LessThanEqual", Property: "Width", Value: String(lighter.maxWidth), IsRequired: false }] : []),
+          // Une image entrelacée se ré-encode, désentrelacée (`InterlacedVideoNotSupported`, `deinterlace=true`
+          // dans l'adresse de Jellyfin). Sans cette condition, une source H.264 entrelacée qui tient déjà
+          // dans la largeur était *copiée* : la marche H.264 rejouait l'image même que le navigateur venait de
+          // refuser. *Des gens bien* (H.264 1080i, chasse du 18/11/2026) : Chromium refuse le premier paquet
+          // (« Failed to send video packet for decoding »), la marche partait, et la même image finissait en
+          // « pas de première image en 20 s » ; désentrelacée par Jellyfin, la même page la joue.
+          ...(lighter ? [{ Condition: "NotEquals", Property: "IsInterlaced", Value: "true", IsRequired: false }] : []),
         ],
       })),
       // Voir `reencodeAudio` : une source qui ne passe pas cette condition ne peut être ni lue

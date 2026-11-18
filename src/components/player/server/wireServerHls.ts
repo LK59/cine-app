@@ -48,6 +48,7 @@ export function wireServerHls({
   lastKnownTime,
   tallyRef,
   escalateToH264Ref,
+  reportFailure,
 }: {
   Hls: typeof HlsClass;
   video: HTMLVideoElement;
@@ -78,6 +79,12 @@ export function wireServerHls({
   lastKnownTime: RefObject<number>;
   tallyRef: RefObject<SessionTally>;
   escalateToH264Ref: RefObject<(trigger: string) => boolean>;
+  /**
+   * Un renoncement définitif : sa ligne `error`, avec la vraie cause. Sans elle, l'écran disait « La
+   * lecture a été interrompue » sans rien au journal, et le chien de garde des 20 s, resté armé, venait
+   * 18 s plus tard écrire « pas de première image en 20 s » et changer le message (chasse du 18/11/2026).
+   */
+  reportFailure: (reason: string) => void;
 }): void {
   const hls = new Hls({
     // hls.js's own default back-buffer behavior varies by version and isn't
@@ -150,6 +157,7 @@ export function wireServerHls({
       }
       setReconnecting(false);
       setLoading(false);
+      reportFailure("hls.js : coupure trop longue");
       setError(t('player.playbackInterruptedCheckConnection'));
     }, NETWORK_OUTAGE_GIVE_UP_MS);
   };
@@ -226,6 +234,7 @@ export function wireServerHls({
           disarmOutage();
           setReconnecting(false);
           setLoading(false);
+          reportFailure("hls.js : réseau, essais épuisés");
           setError(t('player.playbackInterruptedCheckConnection'));
           return;
         }
@@ -254,6 +263,7 @@ export function wireServerHls({
           if (resetByHls) hls.detachMedia();
           setReconnecting(false);
           setLoading(false);
+          reportFailure("hls.js : média, essais épuisés");
           setError(t('player.playbackInterrupted'));
           return;
         }
@@ -270,6 +280,7 @@ export function wireServerHls({
       default:
         setReconnecting(false);
         setLoading(false);
+        reportFailure(`hls.js : erreur fatale (${String(data2.details ?? data2.type)})`);
         setError(t('player.playbackInterrupted'));
     }
   });

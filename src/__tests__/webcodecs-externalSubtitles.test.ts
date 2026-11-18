@@ -21,6 +21,12 @@ sur deux lignes.
 `;
 
 describe("parseSubtitles", () => {
+  it("décode les échappements du WebVTT que Jellyfin écrit (`&amp;`, `&lt;`…), après le retrait des balises", () => {
+    // « Town &amp; Country » s'affichait tel quel (chasse du 18/11/2026).
+    const cues = parseSubtitles("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nTown &amp; Country &lt;3 &#233;t&#xE9; &nbsp;<i>fin</i> &inconnu;\n");
+    expect(cues[0].text).toBe("Town & Country <3 été \u00a0fin &inconnu;");
+  });
+
   it("lit un fichier WebVTT en sautant son en-tête et ses notes", () => {
     const cues = parseSubtitles(VTT);
     expect(cues).toHaveLength(2);
