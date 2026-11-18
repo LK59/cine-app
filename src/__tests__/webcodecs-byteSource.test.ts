@@ -523,12 +523,35 @@ describe("HttpByteSource — le protocole de chaque requête", () => {
       const w = source.networkSinceSeek()!;
       // La dernière entrée de ce nom : la requête qu'on vient de finir.
       expect(w.protocols).toEqual({ h2: w.requests });
-      expect(describeNetwork(w)).toMatch(/, protocole h2$/);
-      expect(describeNetwork({ ...w, protocols: { h2: 3, "http/1.1": 1 } })).toMatch(/, protocoles h2 ×3, http\/1\.1 ×1$/);
+      expect(describeNetwork(w)).toMatch(/, protocole h2, demandé : lecteur 2\.0 Mo ×1$/);
+      expect(describeNetwork({ ...w, protocols: { h2: 3, "http/1.1": 1 } })).toMatch(/, protocoles h2 ×3, http\/1\.1 ×1, demandé : lecteur 2\.0 Mo ×1$/);
       source.close();
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it("dit qui a demandé quoi depuis le saut : le lecteur et le décodeur du son, lu sous son nom (18/11/2026)", async () => {
+    stubFetch();
+    const { describeNetwork, readingAs } = await import("@/lib/webcodecs/byteSource");
+    const source = await HttpByteSource.open("/film.mkv", SIZE);
+    // Avant tout saut : rien n'est compté.
+    await source.read(0, CHUNK);
+    expect(source.networkSinceSeek()).toBeNull();
+    source.abandon(4 * CHUNK);
+    await source.read(4 * CHUNK, CHUNK);
+    const audio = readingAs(source, "son");
+    await audio.read(5 * CHUNK, CHUNK);
+    await audio.read(6 * CHUNK, CHUNK);
+    // Le reste de la source passe tel quel.
+    expect(audio.size).toBe(source.size);
+    const w = source.networkSinceSeek()!;
+    expect(w.demand).toEqual({ lecteur: { reads: 1, bytes: CHUNK }, son: { reads: 2, bytes: 2 * CHUNK } });
+    expect(describeNetwork(w)).toMatch(/, demandé : lecteur 1\.0 Mo ×1, son 2\.0 Mo ×2$/);
+    // Un nouveau saut repart de zéro : rien de ce qui précède n'y reste.
+    source.abandon(9 * CHUNK);
+    expect(source.networkSinceSeek()).toBeNull();
+    source.close();
   });
 
   it("une mesure qui lève ne casse pas la lecture", async () => {

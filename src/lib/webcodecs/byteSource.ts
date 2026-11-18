@@ -18,8 +18,11 @@ import { meterOpeningRequest } from "@/lib/slowLink";
 export interface ByteSource {
   /** Total length of the file in bytes. */
   readonly size: number;
-  /** Reads exactly [offset, offset+length), clamped at EOF. */
-  read(offset: number, length: number): Promise<Uint8Array>;
+  /**
+   * Reads exactly [offset, offset+length), clamped at EOF. `who` : qui lit (« lecteur » par défaut, « son » pour
+   * le décodeur d'une piste ré-encodée — voir `readingAs`), compté par `HttpByteSource` depuis le dernier saut.
+   */
+  read(offset: number, length: number, who?: string): Promise<Uint8Array>;
   /**
    * Starts fetching around an offset nothing has asked for yet.
    *
@@ -264,6 +267,12 @@ export interface NetworkWindow {
   bytes: number;
   /** Du saut à la fin de la dernière requête terminée. */
   elapsedMs: number;
+  /**
+   * Ce que chaque lecteur du fichier a demandé depuis le saut (18/11/2026) : `{ lecteur: { reads, bytes }, son: … }`.
+   * L'enquête sur les sauts lents trouvait sur *Drive* 4K 12 à 24 Mo reçus pour 1 à 4 Mo utiles, et soupçonnait le
+   * décodeur du son ré-encodé (mediabunny), qui lit le fichier de son côté — ceci le dit.
+   */
+  demand?: Record<string, { reads: number; bytes: number }>;
   /** Délai jusqu'aux en-têtes (premier octet), le plus court et le plus long. */
   firstByteMinMs: number;
   firstByteMaxMs: number;
@@ -290,8 +299,31 @@ export function describeNetwork(w: NetworkWindow): string {
     `${(w.bytes / 1048576).toFixed(1)} Mo en ${w.elapsedMs} ms (${mbps.toFixed(0)} Mb/s), ${w.requests} requête(s), ` +
     `premier octet ${w.firstByteMinMs}–${w.firstByteMaxMs} ms, la plus lente ${w.slowestMs} ms` +
     (w.serverMaxMs !== null ? `, serveur ≤ ${w.serverMaxMs} ms` : "") +
-    describeProtocols(w.protocols)
+    describeProtocols(w.protocols) +
+    describeDemand(w.demand)
   );
+}
+
+/** `{ lecteur: {reads: 12, bytes: 2.2e6}, son: … }` → `, demandé : lecteur 2.1 Mo ×12, son 18.4 Mo ×40`. */
+function describeDemand(demand: NetworkWindow["demand"]): string {
+  const seen = Object.entries(demand ?? {}).filter(([, d]) => d.reads > 0);
+  if (seen.length === 0) return "";
+  return `, demandé : ${seen.map(([who, d]) => `${who} ${(d.bytes / 1048576).toFixed(1)} Mo ×${d.reads}`).join(", ")}`;
+}
+
+/**
+ * La même source, lue sous un autre nom (`ByteSource.read`, `who`) — le décodeur d'une piste ré-encodée la reçoit
+ * ainsi, pour que la fenêtre d'un saut dise ce qu'il a demandé à côté du lecteur (18/11/2026). Tout le reste passe tel
+ * quel.
+ */
+export function readingAs(source: ByteSource, who: string): ByteSource {
+  return new Proxy(source, {
+    get(target, property) {
+      if (property === "read") return (offset: number, length: number) => target.read(offset, length, who);
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
 }
 
 /** `{ h2: 5 }` → `, protocole h2` ; `{ h2: 5, "http/1.1": 1 }` → `, protocoles h2 ×5, http/1.1 ×1`. */
@@ -608,6 +640,7 @@ export class HttpByteSource implements ByteSource {
     slowest: number;
     server: number | null;
     protocols: Record<string, number>;
+    demand: Record<string, { reads: number; bytes: number }>;
   } | null = null;
 
   private constructor(url: string, size: number) {
@@ -1043,8 +1076,15 @@ export class HttpByteSource implements ByteSource {
    * milliseconde, une qui attend le réseau ou le disque est notée — c'est le remultiplexeur à sec
    * (voir playbackDiagnosis.ts).
    */
-  async read(offset: number, length: number): Promise<Uint8Array> {
+  async read(offset: number, length: number, who = "lecteur"): Promise<Uint8Array> {
     const from = diagNow();
+    // Qui demande quoi depuis le saut (`NetworkWindow.demand`) — une mesure, jamais une erreur.
+    const window = this.window;
+    if (window) {
+      const d = (window.demand[who] ??= { reads: 0, bytes: 0 });
+      d.reads += 1;
+      d.bytes += Math.max(0, length);
+    }
     // Une lecture dont un morceau n'est pas en mémoire attend : la réserve d'avance (`MemoryReserve`)
     // se retient tant qu'il y en a une — le lien est d'abord au lecteur.
     const start = Math.max(0, Math.min(offset, this.size));
@@ -1172,7 +1212,7 @@ export class HttpByteSource implements ByteSource {
    */
   abandon(keepOffset: number): void {
     this.focusUntil = performance.now() + SEEK_FOCUS_MS;
-    this.window = { since: performance.now(), requests: 0, bytes: 0, lastEnd: 0, fbMin: Infinity, fbMax: 0, slowest: 0, server: null, protocols: {} };
+    this.window = { since: performance.now(), requests: 0, bytes: 0, lastEnd: 0, fbMin: Infinity, fbMax: 0, slowest: 0, server: null, protocols: {}, demand: {} };
     const first = Math.floor(Math.max(0, Math.min(keepOffset, this.size - 1)) / CHUNK_SIZE);
     let dropped = 0;
     for (const [index, own] of this.inflightControllers) {
@@ -1272,6 +1312,7 @@ export class HttpByteSource implements ByteSource {
       slowestMs: Math.round(w.slowest),
       serverMaxMs: w.server,
       protocols: { ...w.protocols },
+      demand: Object.fromEntries(Object.entries(w.demand).map(([who, d]) => [who, { ...d }])),
     };
   }
 

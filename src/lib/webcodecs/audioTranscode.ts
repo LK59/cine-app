@@ -9,6 +9,7 @@
 // The half-second of latency this adds is spent ahead of playback, not at it: a segment's audio is
 // produced while the previous one is still being watched.
 
+import { readingAs } from "./byteSource";
 import { DialogueEnhancer, type DialogueMode } from "./dialogueEnhance";
 import { aacPlan } from "./aacConfig";
 import { effectivePceAnswer } from "./aacPceProbe";
@@ -584,7 +585,8 @@ export class AudioTranscoder {
     // règle pour une piste copiée ailleurs, décodée pour combler un son en retard (§148) : c'est la
     // promesse de `dialogueCanShape`, qui décide des deux.
     const measuredAacDecoder = ((!!dialogue && dialogue !== "off") || copiedTrack) && track.codecId === "A_AAC" && (track.audio?.channels ?? 2) > 2;
-    const decoder = await SoftwareAudioTrack.open(source, track.number, track.codecId, file, measuredAacDecoder ? { measuredAacDecoder } : {});
+    // Lue sous le nom « son » : la fenêtre d'un saut dit ce que ce décodeur demande à côté du lecteur (`readingAs`).
+    const decoder = await SoftwareAudioTrack.open(readingAs(source, "son"), track.number, track.codecId, file, measuredAacDecoder ? { measuredAacDecoder } : {});
     // Tout ce qui suit peut lever — l'amorçage qui échoue sur le décodeur, une description que
     // l'on ne sait pas relire —, et le décodeur (pour le TrueHD, un contexte WebAssembly) comme
     // l'encodeur amorcé n'ont encore aucun propriétaire : fermés ici, sur chaque sortie en erreur.
