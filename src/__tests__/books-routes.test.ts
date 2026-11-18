@@ -209,7 +209,9 @@ describe("GET /api/books", () => {
     expect(names((await (await searchGET(req(undefined, "http://l/api/books/search?q=commun"))).json()).books)).toEqual(["Permis commun"]);
     expect(JSON.stringify(await (await facetsGET(req())).json())).not.toMatch(/Caché|Ailleurs/);
     for (const id of [TAGGED, ELSEWHERE]) {
-      expect((await coverGET(req(), params(id))).status, `couverture ${id}`).toBe(404);
+      // La couverture répond 204 (comme un livre sans image) : une route appelée par carte ne répond
+      // jamais 404 (CrowdSec), et 204 ne dit pas plus que 404 de l'existence du livre.
+      expect((await coverGET(req(), params(id))).status, `couverture ${id}`).toBe(204);
       expect((await fileGET(req(), params(id))).status, `fichier ${id}`).toBe(404);
       expect((await detailGET(req(), params(id))).status, `fiche ${id}`).toBe(404);
       expect((await progressPOST(req(JSON.stringify({ cfi: "epubcfi(/6/4!/4/2)", fraction: 0.5 })), params(id))).status, `position ${id}`).toBe(404);
@@ -309,7 +311,10 @@ describe("l'index du compte : l'accueil, les pages, la recherche", () => {
 
   it("une couverture n'est servie que pour un livre de l'index du compte", async () => {
     jellyfinAnswers([bookItem({ Etag: null })]);
-    expect((await coverGET(req(), params("9".repeat(32)))).status).toBe(404);
+    // Hors de l'index : 204, sans image (18/11/2026 — c'était 404, sur une route appelée par carte).
+    const absent = await coverGET(req(), params("9".repeat(32)));
+    expect(absent.status).toBe(204);
+    expect(absent.headers.get("content-type")).toBeNull();
     // Ce livre-ci, sans empreinte de fichier : rien à faire, et rien demandé à Jellyfin pour lui. Pas de
     // couverture n'est pas une erreur : 204 — des 404 en rafale ont fait bannir un compte par le pare-feu.
     const before = upstream.mock.calls.length;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import { Copy, Loader2 } from "lucide-react";
 import { fetcher } from "@/lib/swr";
@@ -9,6 +9,10 @@ import { useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { ConfigCardFrame } from "@/components/settings/AdminTools";
 import type { StreamDeckToken } from "@/lib/streamdeck/tokens";
+
+const noSubscribe = () => () => {};
+const clientOrigin = () => window.location.origin;
+const serverOrigin = () => "";
 
 /**
  * Les jetons du Stream Deck (27/10/2026, `src/lib/streamdeck/tokens.ts`) : un par appareil, montré une
@@ -22,7 +26,11 @@ export function StreamDeckCard() {
   const [busy, setBusy] = useState(false);
   const [fresh, setFresh] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  // L'adresse lue après l'hydratation, pas pendant le rendu : rendue côté serveur, elle valait « » et
+  // côté navigateur l'origine — React levait l'erreur d'hydratation #418 à chaque ouverture de la page
+  // Administration (vu le 18/11/2026). `useSyncExternalStore` donne « » au serveur et à l'hydratation,
+  // puis l'origine au rendu suivant, sans désaccord.
+  const origin = useSyncExternalStore(noSubscribe, clientOrigin, serverOrigin);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();

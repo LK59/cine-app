@@ -11,6 +11,7 @@ import { useRef } from "react";
 import { useLiquidLens } from "@/lib/liquidGlass/useLiquidLens";
 import type { PlayerPanel } from "./playerNav";
 import { APP_NAME } from "@/lib/appBuild";
+import { requestSearchFocusOnOpen } from "@/lib/searchFocus";
 
 /**
  * Le rail du lecteur — desktop.
@@ -118,9 +119,15 @@ export function PlayerRail() {
             <button
               key={panel}
               type="button"
-              onClick={() => {
+              onClick={(e) => {
                 if (Date.now() - draggedAt.current < 700) return;
                 openPanel(panel, route);
+                // « Recherche » au clic de souris ou à la touche Entrée : le curseur dans le champ
+                // (18/11/2026). Le panneau n'y prend pas le focus de lui-même — c'est voulu au doigt,
+                // pour ne pas lever un clavier qu'on n'a pas demandé (`searchFocus.ts`) —, mais sur
+                // ordinateur ce qu'on tapait juste après le clic n'allait nulle part. Le toucher
+                // (un portable tactile, l'iPad réglé « Ordinateur ») garde la règle du téléphone.
+                if (panel === "search" && (e.nativeEvent as PointerEvent).pointerType !== "touch") requestSearchFocusOnOpen();
               }}
               aria-current={isActive ? "page" : undefined}
               data-lens={panel}

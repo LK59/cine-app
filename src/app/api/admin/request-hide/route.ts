@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 /**
  * Le masquage des demandes pour un compte (`requestHide/`) — administrateur seul, lecture comprise
  * (`proxy.ts` la range aussi dans `ADMIN_ONLY_READS`) : elle nomme qui a demandé quoi. Fonction coupée
- * (aucun compte nommé) : 404, comme si elle n'existait pas.
+ * (aucun compte nommé) : 404, comme si elle n'existait pas — sauf `?state=1`, qui répond `{ enabled: false }`.
  *
  * GET : chaque titre de la bibliothèque et son état ; `?state=1` dit seulement si la fonction est là
  * (le lien de la page Jellyseerr). POST : `{ keys, state: "hidden" | "shown" }` ou `{ auto: boolean }`,
@@ -18,8 +18,13 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const session = await adminOnly(req);
   if (session instanceof NextResponse) return session;
+  // `?state=1` répond toujours 200 : c'est la question « la fonction est-elle là ? », posée à chaque
+  // ouverture de la page Jellyseerr, et « non » n'est pas une erreur. Un 404 y laissait une erreur en
+  // console sur toute installation sans masquage (vu le 18/11/2026). Le reste de la route garde son 404.
+  if (req.nextUrl.searchParams.get("state") === "1") {
+    return NextResponse.json(config.requestHide.enabled ? { enabled: true, account: config.requestHide.account } : { enabled: false });
+  }
   if (!config.requestHide.enabled) return NextResponse.json({ error: "Introuvable" }, { status: 404 });
-  if (req.nextUrl.searchParams.get("state") === "1") return NextResponse.json({ enabled: true, account: config.requestHide.account });
   try {
     return NextResponse.json(await requestHideView());
   } catch (err) {

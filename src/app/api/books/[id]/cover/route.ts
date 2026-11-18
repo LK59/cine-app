@@ -21,7 +21,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     // Une copie cachée (doublon d'un même livre) a aussi sa couverture : elle reste lisible.
     const book = (await bookIndex(caller)).all.get(id);
-    if (!book) return new NextResponse(null, { status: 404 });
+    // Absent de l'index de ce compte : 204, comme un livre sans couverture, jamais 404 (règle CrowdSec,
+    // plus bas). Le cas arrive sans rien d'anormal : un EPUB reconnu illisible pendant que la page
+    // montre encore sa carte sort de l'index, et sa couverture répondait 404 (vu le 18/11/2026 sur
+    // « Dome »). Un livre interdit au compte ne se distingue pas non plus d'un livre sans image.
+    if (!book) return new NextResponse(null, { status: 204, headers: { "Cache-Control": "private, no-store" } });
     fileTag = book.fileTag;
   } catch {
     return new NextResponse(null, { status: 502 });

@@ -69,6 +69,20 @@ describe("GET /api/tmdb/collection/[id]", () => {
     expect(body.parts.map((p: { tmdbId: number }) => p.tmdbId)).toEqual([1, 2]);
     expect(body.parts[0]).toMatchObject({ inLibrary: true, libraryHref: "/radarr/55" });
   });
+  it("puts an undated part (announced sequel) last, not first", async () => {
+    mockTmdb.getCollection.mockResolvedValue({
+      name: "Saga", overview: "o",
+      parts: [
+        { id: 4, title: "Untitled Fourth", release_date: "", poster_path: null, vote_average: 0 },
+        { id: 2, title: "Part 2", release_date: "2016-06-10", poster_path: null, vote_average: 7 },
+        { id: 5, title: "Untitled Fifth", poster_path: null, vote_average: 0 },
+        { id: 1, title: "Part 1", release_date: "2013-07-03", poster_path: null, vote_average: 7 },
+      ],
+    });
+    const { GET } = await import("@/app/api/tmdb/collection/[id]/route");
+    const body = await (await GET(fakeReq(), params("11"))).json();
+    expect(body.parts.map((p: { tmdbId: number }) => p.tmdbId)).toEqual([1, 2, 4, 5]);
+  });
 });
 
 describe("GET /api/tmdb/person/[id]", () => {

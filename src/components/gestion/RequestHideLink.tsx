@@ -8,7 +8,7 @@ import { useT } from "@/components/TranslationProvider";
 
 /**
  * Le chemin vers le masquage des demandes, montré seulement quand la fonction est là : la route
- * répond 404 sinon, et le lien ne s'affiche pas (pas d'entrée dans la navigation : c'est une option
+ * répond `{ enabled: false }` sinon, et le lien ne s'affiche pas (pas d'entrée dans la navigation : c'est une option
  * propre à une installation).
  */
 export function RequestHideLink() {
