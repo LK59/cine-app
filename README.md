@@ -564,7 +564,7 @@ naming the services behind; signed in, it shows every capability.
 
 ```bash
 mkdir cine-app && cd cine-app
-curl -o docker-compose.yml https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.example.yml
+curl -o docker-compose.yml https://raw.githubusercontent.com/LK59/laterna/main/docker-compose.example.yml
 docker compose up -d
 # then open http://localhost:3000 on the server (or through an SSH tunnel) — the setup assistant
 # asks for the rest, starting with the one-time setup code printed in `docker compose logs cine-app`

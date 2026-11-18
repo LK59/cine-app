@@ -96,7 +96,7 @@ Or download it:
 
 ```bash
 mkdir cine-app && cd cine-app
-curl -o docker-compose.yml https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.example.yml
+curl -o docker-compose.yml https://raw.githubusercontent.com/LK59/laterna/main/docker-compose.example.yml
 ```
 
 As it stands, it works: port 3000 on the server's loopback only, a named volume, UTC. What you may

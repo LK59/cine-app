@@ -114,7 +114,7 @@ volumes:
 #     external: true                      # an existing network (`docker network ls`); use its real name
 ```
 
-Or download it: `curl -o docker-compose.yml https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.example.yml`.
+Or download it: `curl -o docker-compose.yml https://raw.githubusercontent.com/LK59/laterna/main/docker-compose.example.yml`.
 
 **What to adjust, line by line:**
 
@@ -596,8 +596,8 @@ external network, a bind-mounted `./data`, a media folder, an `.env` file and ha
 configured as code. Start from it with:
 
 ```bash
-curl -O https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.advanced.yml
-curl -O https://raw.githubusercontent.com/LK59/cine-app/main/.env.example
+curl -O https://raw.githubusercontent.com/LK59/laterna/main/docker-compose.advanced.yml
+curl -O https://raw.githubusercontent.com/LK59/laterna/main/.env.example
 cp docker-compose.advanced.yml docker-compose.yml
 cp .env.example .env
 mkdir -p data && sudo chown -R 1001:1001 data

@@ -57,7 +57,7 @@ describe("AppSignature", () => {
     const line = await renderWith("8.1.0", "fr");
     const link = [...line.querySelectorAll("a")].find((a) => a.textContent === "GitHub")!;
     expect(link.textContent).toBe("GitHub");
-    expect(link.getAttribute("href")).toBe("https://github.com/LK59/cine-app");
+    expect(link.getAttribute("href")).toBe("https://github.com/LK59/laterna");
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toBe("noopener noreferrer");
     expect(link.getAttribute("aria-label")).toBe("Code source sur GitHub (nouvel onglet)");

@@ -46,7 +46,7 @@ export const APP_NAME = "Laterna";
 /** Le moteur de lecture du navigateur (remux, son, tampons, réseau), nommé là où l'application se présente. */
 export const ENGINE_NAME = "Lumen";
 export const APP_AUTHOR = "LK59";
-export const APP_REPOSITORY_URL = "https://github.com/LK59/cine-app";
+export const APP_REPOSITORY_URL = "https://github.com/LK59/laterna";
 /** Le guide de déploiement du service des acteurs à l'écran, sur le dépôt (§138, carte des réglages). */
 export const XRAY_GUIDE_URL = `${APP_REPOSITORY_URL}/blob/main/xray/README.md`;
 /** Le guide de déploiement du service des salons du chalet, sur le dépôt (§146, carte des réglages). */
