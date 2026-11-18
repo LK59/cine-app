@@ -1064,6 +1064,9 @@
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.35);
 }
 @media (min-width: 640px) { .player-time { font-size: 13px; } }
+/* L'heure de fin, sous le temps restant (18/11/2026) : la même typographie, plus petite et plus pâle. */
+.player-time.player-time-ends { font-size: 11px; color: rgb(255 255 255 / 0.5); margin-top: 1px; }
+@media (min-width: 640px) { .player-time.player-time-ends { font-size: 12px; } }
 /* Les menus ouverts depuis la pilule du bas : un fondu et un léger grossissement depuis son coin. */
 .player-menu {
   transform-origin: bottom right;
@@ -1804,6 +1807,18 @@ html[data-ui="touch"] {
    Pas un chargement (04/10/2026) : le bouton lecture/pause reste là et touchable, un anneau tourne
    autour de lui, et le fil du haut court en paysage. Les deux n'apparaissent qu'après 150 ms, pour
    qu'une reprise immédiate ne fasse rien clignoter. Une rotation et une opacité : rien à peindre. */
+/* La bulle d'une rafale de sauts (18/11/2026) : « +40 s » au-dessus des trois boutons, le temps de la rafale. */
+.player-skip-total {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.95);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+  animation: player-skip-total-in 120ms ease-out;
+}
+@keyframes player-skip-total-in { from { opacity: 0; transform: translate(-50%, 4px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) { .player-skip-total { animation: none; } }
+
 .player-resume-ring {
   position: absolute;
   inset: -5px;

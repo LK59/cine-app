@@ -7,6 +7,7 @@ import { Play, Pause, Maximize, Minimize, Captions, AudioLines, Loader2, RotateC
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import type { HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
+import { formatTime } from "@/lib/playerClock";
 import { PlayerLockVeil } from "@/components/playerControls/PlayerLockVeil";
 import { createLiquidPress, prefersReducedMotion } from "@/lib/liquidGlass/liquid";
 import { usePrewarmEpisodes } from "@/components/player/PlayerEpisodesMenu";
@@ -285,6 +286,9 @@ const ADVANCE_GUARD_MS = 2000;
  * ±10 s : la flèche fait un tour autour du « 10 », qui reste immobile — un tour un peu trop loin,
  * puis posé. Joué au clic, après le geste liquide du bouton, sur la flèche seule.
  */
+/** Après le dernier appui d'une rafale de sauts, le temps sans aucun chargement à l'écran — voir `skipBurst`. */
+const SKIP_GRACE_MS = 500;
+
 function spinSkip(button: HTMLElement, turn: -1 | 1) {
   const arrow = button.querySelector<HTMLElement>(".player-skip-arrow");
   if (!arrow || typeof arrow.animate !== "function" || prefersReducedMotion()) return;
@@ -394,6 +398,19 @@ export function PlayerControls({
    */
   const [locked, setLocked] = useState(false);
   const visible = shown && !locked;
+  /**
+   * Une rafale de sauts (18/11/2026, demandée par le propriétaire) : ±10 s enchaînés au bouton ou au clavier. Chaque
+   * appui saute tout de suite, comme partout (Netflix, YouTube, Apple TV) ; mais un saut hors de la mémoire tampon
+   * passait le lecteur en « chargement », qui retirait les trois boutons du centre pour sa roue — il fallait
+   * attendre l'image pour taper le +10 suivant (555 rafales de trois appuis ou plus au journal, 37 de dix).
+   * Pendant la rafale (`skipBurst`, jusqu'à ce que l'image reparte), les boutons restent ; dans la demi-seconde qui
+   * suit le dernier appui (`skipGrace`), aucun chargement ne se montre — passé ce délai, le fil en haut et l'anneau
+   * autour du bouton lecture, boutons toujours là. `skipTotal` : ce que la rafale a déplacé, dans une bulle.
+   */
+  const [skipBurst, setSkipBurst] = useState(false);
+  const [skipGrace, setSkipGrace] = useState(false);
+  const [skipTotal, setSkipTotal] = useState(0);
+  const skipGraceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * Masqués, les contrôles ne prennent la position qu'une fois par seconde (28/09/2026). Chaque
    * `timeupdate` (~4 par seconde) faisait recalculer tout ce composant, même invisible — du travail
@@ -657,6 +674,23 @@ export function PlayerControls({
   const chapters = useChapters(itemId, lab);
 
   useElementMirror(videoRef, mirrorSetters, seekSpinner, seekingRef, visibleRef, probeVolume);
+
+  // La rafale finit quand l'image repart (`playing`), ou au saut posé d'un film en pause, qui ne repart pas.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const end = () => setSkipBurst(false);
+    const onSeeked = () => {
+      if (video.paused) setSkipBurst(false);
+    };
+    video.addEventListener("playing", end);
+    video.addEventListener("seeked", onSeeked);
+    return () => {
+      video.removeEventListener("playing", end);
+      video.removeEventListener("seeked", onSeeked);
+      if (skipGraceTimer.current) clearTimeout(skipGraceTimer.current);
+    };
+  }, [videoRef]);
 
 
   const { castSupported, castKind } = useCastAvailability(videoRef);
@@ -987,6 +1021,21 @@ export function PlayerControls({
     seekElement(video, target, true);
     // Lu avant le saut : la position d'où l'on recule est la fin du passage à sous-titrer (§150).
     replay.noteSkip(deltaSeconds, from);
+    noteSkipBurst(target - from);
+  }
+
+  /** Un saut de la rafale : voir `skipBurst`. Les commandes restent, et la bulle additionne. */
+  function noteSkipBurst(moved: number) {
+    setSkipBurst(true);
+    setSkipGrace(true);
+    setSkipTotal((total) => total + Math.round(moved));
+    showControls();
+    if (skipGraceTimer.current) clearTimeout(skipGraceTimer.current);
+    skipGraceTimer.current = setTimeout(() => {
+      skipGraceTimer.current = null;
+      setSkipGrace(false);
+      setSkipTotal(0);
+    }, SKIP_GRACE_MS);
   }
 
   // Split in two: dragging the seek bar only moves the thumb/displayed time locally (no real
@@ -1175,7 +1224,7 @@ export function PlayerControls({
       {/* Une reprise n'a que le fil (en paysage, voir globals.css) et l'anneau du bouton lecture :
           ni roue au centre, ni boutons retirés. Le fil d'une reprise n'apparaît qu'après un
           instant (`player-wait-late`), pour qu'une reprise immédiate ne fasse rien clignoter. */}
-      {(loading || buffering || resuming) && !openingQuiet && (
+      {(loading || buffering || resuming) && !openingQuiet && !skipGrace && (
         <>
           <div
             className={`player-wait-thread pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden bg-white/10 ${
@@ -1184,7 +1233,7 @@ export function PlayerControls({
           >
             <div className="player-loading-line h-full w-full bg-accent-500" />
           </div>
-          {(loading || buffering) && !resuming && (
+          {(loading || buffering) && !resuming && !skipBurst && (
             <div className="player-wait-wheel pointer-events-none absolute inset-0 z-20 items-center justify-center">
               <Loader2 size={40} className="animate-spin text-white/80" />
             </div>
@@ -1351,8 +1400,15 @@ export function PlayerControls({
             double-tap-the-screen-edge gesture (too easy to trigger by accident, and would
             conflict with the tap-to-toggle-controls handler covering the same area). Hidden
             while a spinner is already showing. */}
-        {(resuming || (!loading && !buffering)) && (
+        {(resuming || skipBurst || (!loading && !buffering)) && (
           <div ref={centerGroupRef} data-player-navgroup="center" className={`${visible ? "pointer-events-auto" : "pointer-events-none"} absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-9 sm:gap-12 max-[379px]:gap-6`}>
+            {/* Ce que la rafale a déplacé, au-dessus des boutons, le temps de la rafale (`skipBurst`). */}
+            {skipGrace && skipTotal !== 0 && (
+              <span data-player-skip-total="" aria-hidden className="player-skip-total pointer-events-none absolute bottom-full left-1/2 mb-4 -translate-x-1/2 whitespace-nowrap">
+                {skipTotal > 0 ? "+" : "\u2212"}
+                {formatTime(Math.abs(skipTotal))}
+              </span>
+            )}
             <button
               data-player-nav="skip-back"
               onClick={(e) => {
@@ -1379,7 +1435,7 @@ export function PlayerControls({
             >
               {shownPlaying ? <Pause size={30} fill="currentColor" strokeWidth={0} /> : <Play size={30} fill="currentColor" strokeWidth={0} className="translate-x-[2px]" />}
               {/* La reprise en cours : un anneau qui tourne autour du bouton, qui reste touchable. */}
-              {resuming && <span className="player-resume-ring" aria-hidden data-player-resuming="" />}
+              {(resuming || (skipBurst && !skipGrace && (loading || buffering))) && <span className="player-resume-ring" aria-hidden data-player-resuming="" />}
             </button>
             <button
               data-player-nav="skip-fwd"
@@ -1565,6 +1621,7 @@ export function PlayerControls({
             suspendedRef={suspendedRef}
             currentTime={currentTime}
             duration={duration}
+            speed={speed}
             bufferedEnd={bufferedEnd}
             downloadedFraction={downloadedFraction}
             chapters={chapters}

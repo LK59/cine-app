@@ -9,6 +9,8 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useT } from "@/components/TranslationProvider";
 import { formatTime } from "@/lib/playerClock";
+import { fmtTime } from "@/lib/format";
+import { useMinuteNow } from "@/lib/useMinuteNow";
 import type { TrickplayInfo } from "@/lib/trickplayTile";
 
 /**
@@ -27,6 +29,16 @@ const TOUCH_JITTER_PX = 1;
  */
 const TOUCH_SLOP_PX = 6;
 
+/**
+ * L'heure de fin (18/11/2026, demandée par le propriétaire) : sous le temps restant, plus petite et plus pâle —
+ * « fin à 23:42 ». Elle suit la vitesse de lecture ; rien dans la dernière minute, ni sans durée connue.
+ */
+function endsAtLabel(duration: number, currentTime: number, speed: number, now: number): string | null {
+  const left = duration - currentTime;
+  if (!(now > 0) || !Number.isFinite(left) || left < 60) return null;
+  return fmtTime(now + (left / (speed > 0 ? speed : 1)) * 1000);
+}
+
 /** Le temps restant, signé « − » (U+2212) tant qu'il en reste. */
 function remainingLabel(duration: number, currentTime: number): string {
   const left = Math.max(0, duration - currentTime);
@@ -40,6 +52,7 @@ export function PlayerSeekBar({
   suspendedRef,
   currentTime,
   duration,
+  speed = 1,
   bufferedEnd,
   downloadedFraction,
   chapters,
@@ -57,6 +70,8 @@ export function PlayerSeekBar({
   suspendedRef: RefObject<boolean>;
   currentTime: number;
   duration: number;
+  /** La vitesse de lecture — l'heure de fin la suit. */
+  speed?: number;
   bufferedEnd: number;
   downloadedFraction?: number;
   chapters: { start: number; name: string | null }[];
@@ -136,6 +151,14 @@ export function PlayerSeekBar({
   const [previewTime, setPreviewTime] = useState<number | null>(null);
   /** The bar is under a finger or a pointer — the one state that thickens it. */
   const scrubbing = previewTime !== null;
+  // L'heure relue au rythme de la vidéo (`timeupdate`), sans minuterie de plus — voir `useMinuteNow`.
+  const [subscribeVideoClock] = useState(() => (onChange: () => void) => {
+    const video = videoRef.current;
+    video?.addEventListener("timeupdate", onChange);
+    return () => video?.removeEventListener("timeupdate", onChange);
+  });
+  const now = useMinuteNow(subscribeVideoClock);
+  const endsAt = endsAtLabel(duration, currentTime, speed, now);
 
   const [previewFraction, setPreviewFraction] = useState(0);
 
@@ -512,7 +535,15 @@ export function PlayerSeekBar({
     </div>
     {/* Le temps restant porte son signe, comme sur l'Apple TV (19/10/2026) : « 2:13:36 » seul se
         lisait comme la durée du film. Pas de signe à zéro. */}
-    <span data-player-remaining className="player-time shrink-0 text-right">{remainingLabel(duration, currentTime)}</span>
+    <span className="relative shrink-0">
+      <span data-player-remaining className="player-time block text-right">{remainingLabel(duration, currentTime)}</span>
+      {endsAt && (
+        // Posée sous le temps restant, hors du flux : la barre ne bouge pas d'un pixel.
+        <span data-player-ends className="player-time player-time-ends absolute right-0 top-full whitespace-nowrap text-right">
+          {t("player.endsAt", { time: endsAt })}
+        </span>
+      )}
+    </span>
     </div>
   );
 }
