@@ -2218,7 +2218,7 @@
       "gaveWay": "El reproductor nativo cedió el paso: {reason}",
       "paths": {
         "remuxName": "Remultiplexado",
-        "remuxDetail": "decodificación por hardware, HDR nativo",
+        "remuxDetail": "decodificado en el dispositivo, sin transcodificación",
         "pendingName": "En examen",
         "pendingDetail": "el archivo aún no ha hablado"
       },

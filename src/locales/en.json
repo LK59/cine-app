@@ -2218,7 +2218,7 @@
       "gaveWay": "The native player gave way: {reason}",
       "paths": {
         "remuxName": "Remuxing",
-        "remuxDetail": "hardware decoding, native HDR",
+        "remuxDetail": "decoded on this device, no transcoding",
         "pendingName": "Examining",
         "pendingDetail": "the file has not spoken yet"
       },

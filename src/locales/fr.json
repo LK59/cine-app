@@ -2218,7 +2218,7 @@
       "gaveWay": "Le lecteur natif a cédé la main : {reason}",
       "paths": {
         "remuxName": "Remultiplexage",
-        "remuxDetail": "décodage matériel, HDR natif",
+        "remuxDetail": "décodé par l'appareil, sans transcodage",
         "pendingName": "En cours d'examen",
         "pendingDetail": "le fichier n'a pas encore parlé"
       },
