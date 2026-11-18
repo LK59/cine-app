@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AudioKeepAwake, KEEP_AWAKE_MAX_MS, KEEP_AWAKE_TAIL_MS, KEEP_AWAKE_WAKE_MS } from "@/components/player/audioKeepAwake";
+import { AudioKeepAwake, KEEP_AWAKE_MAX_MS, KEEP_AWAKE_TAIL_MS } from "@/components/player/audioKeepAwake";
 
-// La veille de la sortie audio pendant une pause (Lumen serveur, 17/11/2026) : cinq minutes, puis la reprise attend
-// le réveil de la sortie (`awake()` faux) — la micro-attente du lecteur.
+// La veille de la sortie audio pendant une pause (17/11/2026, gardée par le lecteur natif depuis §196) : cinq
+// minutes au plus, puis la sortie peut s'endormir (`awake()` faux).
 function fakeContext() {
   const calls: string[] = [];
   class FakeContext {
@@ -47,7 +47,6 @@ describe("AudioKeepAwake", () => {
     expect(keep.awake()).toBe(false);
     expect(calls).toContain("stop");
     expect(KEEP_AWAKE_MAX_MS).toBe(5 * 60_000);
-    expect(KEEP_AWAKE_WAKE_MS).toBe(500);
   });
 
   it("à la reprise, encore une seconde ; fermée, elle repart à la pause suivante", () => {

@@ -67,4 +67,24 @@ describe("advance depuis le menu « Épisodes »", () => {
     expect(stops).toEqual([]);
     expect(api.mode).toBe("full");
   });
+
+  it("ce qu'un rechargement de page a posé ne passe pas à l'épisode suivant", async () => {
+    // Chasse du 18/11/2026 : `fromReload`, `reloadAttempt` et `initialAudioStreamIndex` ne valent que pour
+    // l'élément rouvert par le rechargement. Gardés, l'épisode suivant perdait l'ouverture animée, le
+    // lecteur serveur y attendait 3 s et négociait avec l'index de piste de l'épisode d'avant.
+    render(
+      <PlaybackProvider>
+        <Probe />
+      </PlaybackProvider>
+    );
+    act(() => api.play({ itemId: "e1", title: "Un", resumeAt: 600, fromReload: true, reloadAttempt: 1, initialAudioStreamIndex: 3 }));
+    await waitFor(() => expect(api.session?.itemId).toBe("e1"));
+    expect(api.session?.fromReload).toBe(true);
+    act(() => api.advance({ itemId: "e2", title: "Deux" }));
+    await waitFor(() => expect(api.session?.itemId).toBe("e2"));
+    expect(api.session?.fromReload).toBeUndefined();
+    expect(api.session?.reloadAttempt).toBeUndefined();
+    expect(api.session?.initialAudioStreamIndex).toBeUndefined();
+    expect(api.session?.resumeAt).toBe(0);
+  });
 });

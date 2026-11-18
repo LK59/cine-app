@@ -824,6 +824,11 @@ export class HttpByteSource implements ByteSource {
           noteUnauthorized(res);
           throw new SessionEnded();
         }
+        // 416 : la plage commence après la fin du fichier — une taille d'avance périmée (fichier
+        // remplacé plus petit sous la même adresse), dont le dernier morceau tombe au-delà de la vraie
+        // fin. Le redemander n'y changera rien : il était pris pour une panne réseau, redemandé quatre
+        // fois en 2,3 s sous « Connexion perdue ou instable… » (chasse du 18/11/2026).
+        if (res.status === 416) throw new Error("La plage demandée est hors du fichier (statut 416).");
         if (res.status !== 206) throw new Error(`Le serveur a refusé la plage demandée (statut ${res.status}).`);
         this.checkTotal(res);
         const headersAt = performance.now();
@@ -863,7 +868,7 @@ export class HttpByteSource implements ByteSource {
         if (this.controller.signal.aborted) throw error;
         // Abandonné pour un saut : ce n'est pas un échec, et le redemander irait contre le saut.
         if (own.aborted) throw new ReadAbandoned();
-        if (error instanceof Error && error.message.includes("statut 200")) throw error;
+        if (error instanceof Error && (error.message.includes("statut 200") || error.message.includes("statut 416"))) throw error;
         if (error instanceof SessionEnded) throw error;
         last = error;
         diagRequestFailed();
@@ -950,6 +955,10 @@ export class HttpByteSource implements ByteSource {
       } catch {
         /* l'appareil n'est qu'une avance : le réseau répond */
       }
+      // Fermée, ou ce morceau abandonné pour un saut, pendant l'attente de l'appareil : plus personne
+      // ne l'attend. Le réseau partait quand même — un signal déjà coupé ne déclenche plus son
+      // écouteur `abort`, la requête n'était jamais annulée (chasse du 18/11/2026).
+      if (own.aborted || this.controller.signal.aborted) throw new ReadAbandoned();
     }
     return this.fetchWithRetries(start, end, own);
   }

@@ -14,18 +14,14 @@
  * il s'arrête une seconde après que le film a repris. Validé à l'oreille et filmé le 17/11/2026 : haut-parleur, son
  * revenu en 0 à 0,03 s sur 9 reprises (0,43 à 0,49 s sur 8 sans lui). Borné à cinq minutes de pause (une minute
  * jusqu'au même jour : une perte « extrêmement légère » revenait après les longues pauses) ; au-delà, et au retour
- * d'arrière-plan ou de veille (la veille y est fermée), la reprise réveille d'abord la sortie et lance l'image
- * `KEEP_AWAKE_WAKE_MS` plus tard (la micro-attente de feu `LumenServerHost`). Tout échec (pas de Web Audio, contexte refusé
- * sans geste) laisse le comportement ordinaire : rien ne dépend de ce module.
+ * d'arrière-plan ou de veille (la veille y est fermée), la reprise est l'ordinaire : sur MediaSource l'horloge suit le
+ * son, l'image attend le réveil de la sortie. (Lumen serveur, en HLS natif, lançait l'image 500 ms plus tard ; cette
+ * micro-attente est partie avec lui, DECISIONS.md §196.) Tout échec (pas de Web Audio, contexte refusé sans geste)
+ * laisse le comportement ordinaire : rien ne dépend de ce module.
  */
 
 /** Au-delà, la veille s'arrête : la sortie reste allumée sans calcul, mais une pause de plusieurs minutes n'a personne. */
 export const KEEP_AWAKE_MAX_MS = 5 * 60_000;
-/**
- * Le réveil d'une sortie endormie, avant de lancer l'image : le retard du son mesuré sans veille (0,43 à 0,49 s, filmé
- * le 17/11/2026), arrondi au-dessus.
- */
-export const KEEP_AWAKE_WAKE_MS = 500;
 /** Après la reprise, la veille dure encore un peu : le son du film prend le relais avant qu'elle se taise. */
 export const KEEP_AWAKE_TAIL_MS = 1_000;
 
@@ -59,7 +55,7 @@ export class AudioKeepAwake {
     }
   }
 
-  /** La veille joue en ce moment : la sortie audio est éveillée, une reprise n'a pas à l'attendre. */
+  /** La veille joue en ce moment (lu par ses tests ; le lecteur ne s'en sert plus depuis §196). */
   awake(): boolean {
     return this.source !== null;
   }
