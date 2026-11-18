@@ -1276,7 +1276,31 @@
     "resumed": "Torrent resumed",
     "actionPause": "Pause",
     "actionResume": "Resume",
-    "actionDelete": "Delete"
+    "actionDelete": "Delete",
+    "states": {
+      "error": "Error",
+      "missingFiles": "Missing files",
+      "uploading": "Seeding",
+      "pausedUP": "Completed, paused",
+      "stoppedUP": "Completed, stopped",
+      "queuedUP": "Seeding queued",
+      "stalledUP": "Seeding, idle",
+      "checkingUP": "Checking",
+      "forcedUP": "Forced seeding",
+      "allocating": "Allocating space",
+      "downloading": "Downloading",
+      "metaDL": "Fetching metadata",
+      "forcedMetaDL": "Fetching metadata, forced",
+      "pausedDL": "Paused",
+      "stoppedDL": "Stopped",
+      "queuedDL": "Queued",
+      "stalledDL": "Waiting for peers",
+      "checkingDL": "Checking",
+      "forcedDL": "Forced download",
+      "checkingResumeData": "Checking resume data",
+      "moving": "Moving",
+      "unknown": "Unknown"
+    }
   },
   "health": {
     "pageTitle": "System health",

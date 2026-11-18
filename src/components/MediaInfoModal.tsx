@@ -2,7 +2,8 @@
 
 import { Modal } from "@/components/Modal";
 import type { RadarrMovie } from "@/lib/clients/radarr";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
+import { fmtSize } from "@/lib/format";
 
 function fmt(bps?: number): string {
   if (!bps) return "—";
@@ -29,15 +30,9 @@ export function MediaInfoModal({
   onClose: () => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const f = movie.movieFile;
   const mi = f?.mediaInfo;
-
-  function bytes(n?: number): string {
-    if (!n) return "—";
-    const u = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(n) / Math.log(1024));
-    return `${(n / Math.pow(1024, i)).toFixed(1)} ${u[i]}`;
-  }
 
   return (
     <Modal title={t('mediaInfo.title')} onClose={onClose}>
@@ -50,7 +45,7 @@ export function MediaInfoModal({
               {t('mediaInfo.sectionFile')}
             </p>
             <Row label={t('mediaInfo.path')} value={f.relativePath} />
-            <Row label={t('mediaInfo.size')} value={bytes(f.size)} />
+            <Row label={t('mediaInfo.size')} value={fmtSize(f.size ?? 0, locale)} />
             <Row label={t('mediaInfo.quality')} value={f.quality?.quality?.name} />
             <Row label={t('mediaInfo.container')} value={mi?.containerFormat} />
           </section>

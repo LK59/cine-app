@@ -5,7 +5,8 @@ import { Modal } from "@/components/Modal";
 import { Pause, Play, Trash2, ArrowDown, ArrowUp } from "lucide-react";
 import type { QbTorrent } from "@/lib/clients/qbittorrent";
 import { fmtSize, fmtEta, relativeTimeAbs } from "@/lib/format";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
+import { torrentStateLabel } from "@/lib/torrentState";
 
 function isPaused(state: string): boolean {
   return /^(paused|stopped)/i.test(state);
@@ -25,6 +26,7 @@ export function TorrentDetailModal({
   onRemove: (hash: string, deleteFiles: boolean) => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteFiles, setDeleteFiles] = useState(false);
 
@@ -53,11 +55,11 @@ export function TorrentDetailModal({
         <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
           <div>
             <p className="text-xs text-subtle">{t("qbittorrent.detail.status")}</p>
-            <p className="capitalize text-white">{torrent.state}</p>
+            <p className="text-white">{torrentStateLabel(torrent.state, t)}</p>
           </div>
           <div>
             <p className="text-xs text-subtle">{t("qbittorrent.detail.size")}</p>
-            <p className="text-white">{fmtSize(torrent.size)}</p>
+            <p className="text-white">{fmtSize(torrent.size, locale)}</p>
           </div>
           <div>
             <p className="text-xs text-subtle">{t("qbittorrent.eta")}</p>
@@ -66,13 +68,13 @@ export function TorrentDetailModal({
           <div>
             <p className="text-xs text-subtle">{t("qbittorrent.detail.down")}</p>
             <p className="flex items-center gap-1 text-success">
-              <ArrowDown size={12} /> {fmtSize(torrent.dlspeed)}/s
+              <ArrowDown size={12} /> {fmtSize(torrent.dlspeed, locale)}/s
             </p>
           </div>
           <div>
             <p className="text-xs text-subtle">{t("qbittorrent.detail.up")}</p>
             <p className="flex items-center gap-1 text-accent-400">
-              <ArrowUp size={12} /> {fmtSize(torrent.upspeed)}/s
+              <ArrowUp size={12} /> {fmtSize(torrent.upspeed, locale)}/s
             </p>
           </div>
           <div>
@@ -81,11 +83,11 @@ export function TorrentDetailModal({
           </div>
           <div>
             <p className="text-xs text-subtle">{t("qbittorrent.detail.downloaded")}</p>
-            <p className="text-white">{fmtSize(torrent.downloaded)}</p>
+            <p className="text-white">{fmtSize(torrent.downloaded, locale)}</p>
           </div>
           <div>
             <p className="text-xs text-subtle">{t("qbittorrent.detail.uploaded")}</p>
-            <p className="text-white">{fmtSize(torrent.uploaded)}</p>
+            <p className="text-white">{fmtSize(torrent.uploaded, locale)}</p>
           </div>
           <div>
             <p className="text-xs text-subtle">{t("qbittorrent.detail.age")}</p>

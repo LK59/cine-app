@@ -23,7 +23,7 @@ import { useToast } from "@/components/Toast";
 import { PosterImage } from "@/components/PosterImage";
 import { MediaCard } from "@/components/MediaCard";
 import { ImdbBadge } from "@/components/ImdbBadge";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
 import { apiAction } from "@/lib/apiAction";
 
 function poster(movie: RadarrMovie) {
@@ -60,6 +60,7 @@ export default function RadarrPage() {
   // marche à suivre, au lieu de partir chercher un serveur qui n'existe pas.
   const notConfigured = !useConfiguredServices().isConfigured("radarr");
   const t = useT();
+  const { locale } = useLocale();
   const { mutate } = useSWRConfig();
   const { isReadOnly } = useRole();
   const toast = useToast();
@@ -330,7 +331,7 @@ export default function RadarrPage() {
                         {movie.hasFile ? t('radarr.downloaded') : t('radarr.missing')}
                       </span>
                       {movie.sizeOnDisk > 0 && (
-                        <span className="text-xs text-subtle">{fmtSize(movie.sizeOnDisk)}</span>
+                        <span className="text-xs text-subtle">{fmtSize(movie.sizeOnDisk, locale)}</span>
                       )}
                       <span className="text-xs text-subtle">{relDate(movie.added, t)}</span>
                     </div>

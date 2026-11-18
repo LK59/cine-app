@@ -13,6 +13,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (key: string) => key,
+  useLocale: () => ({ locale: "fr", setLocale: () => {} }),
 }));
 vi.mock("@/components/Toast", () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn() }),

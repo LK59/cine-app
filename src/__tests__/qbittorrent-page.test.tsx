@@ -9,6 +9,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (key: string, vars?: Record<string, unknown>) => (vars ? `${key}:${JSON.stringify(vars)}` : key),
+  useLocale: () => ({ locale: "fr", setLocale: () => {} }),
 }));
 const toastSuccess = vi.fn();
 const toastError = vi.fn();

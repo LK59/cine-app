@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { Loader2, Pause, Play, RotateCcw, Zap } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { fmtEta, fmtSize } from "@/lib/format";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { ErrorState } from "@/components/StateViews";
 import { LANGUAGE_CHOICES, parseLanguageSetting } from "@/lib/repliques/languages";
@@ -28,6 +28,7 @@ const ACTIVE: RepliquesStatus["phase"][] = ["planning", "running", "waiting-play
 
 export function DialogueSearchCard() {
   const t = useT();
+  const { locale } = useLocale();
   const toast = useToast();
   const { data, error, mutate } = useSWR<RepliquesStatus>("/api/repliques/admin", fetcher, {
     // Pendant une passe, la progression bouge : rafraîchie toutes les trois secondes ; sinon au calme.
@@ -181,7 +182,7 @@ export function DialogueSearchCard() {
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
                   <Fact label={t("repliques.admin.films")} value={`${run.done} / ${run.total}`} />
                   <Fact label={t("repliques.admin.eta")} value={data.etaMs !== null ? fmtEta(Math.round(data.etaMs / 1000)) : "—"} />
-                  <Fact label={t("repliques.admin.read")} value={fmtSize(run.bytesRead)} />
+                  <Fact label={t("repliques.admin.read")} value={fmtSize(run.bytesRead, locale)} />
                   <Fact label={t("repliques.admin.errors")} value={String(run.errors)} />
                 </dl>
                 {(data.currentFilms.length > 0 || run.lastFilm) && (
@@ -244,7 +245,7 @@ export function DialogueSearchCard() {
               <div>
                 <h3 className="text-base font-semibold text-white">{t("repliques.admin.indexTitle")}</h3>
                 <p className="mt-1 text-sm text-muted">
-                  {t("repliques.admin.indexSize", { size: fmtSize(data.index.bytes), lines: data.index.lines.toLocaleString(), films: data.index.filmsWithLines })}
+                  {t("repliques.admin.indexSize", { size: fmtSize(data.index.bytes, locale), lines: data.index.lines.toLocaleString(), films: data.index.filmsWithLines })}
                 </p>
               </div>
               <button type="button" className="btn btn-sm rounded-full" disabled={busy !== null || !mountOk} onClick={() => void act("rebuild")}>

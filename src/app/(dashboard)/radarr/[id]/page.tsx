@@ -46,7 +46,7 @@ import type { FileStreamsResponse } from "@/app/api/jellyfin/streams/[itemId]/ro
 import { posterUrl } from "@/lib/images";
 import { useRole } from "@/lib/useRole";
 import { canAutoSearchMovie } from "@/lib/mediaPermissions";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
 import { characterLabel } from "@/lib/characterLabel";
 import { apiAction } from "@/lib/apiAction";
 import { RequestRefused, refusalMessage } from "@/lib/requestRefusal";
@@ -96,6 +96,7 @@ export default function RadarrMovieDetailPage() {
   const { isReadOnly, jfId } = useRole();
   const toast = useToast();
   const t = useT();
+  const { locale } = useLocale();
   const [selectedActor, setSelectedActor] = useState<{ tmdbId: number; name: string; photoUrl: string | null } | null>(null);
   const [showCollection, setShowCollection] = useState(false);
 
@@ -584,7 +585,7 @@ export default function RadarrMovieDetailPage() {
                 </div>
                 <div className="text-sm">
                   <p className="text-white">
-                    {movie.movieFile.quality?.quality?.name} · {formatBytes(movie.movieFile.size)}
+                    {movie.movieFile.quality?.quality?.name} · {formatBytes(movie.movieFile.size, locale)}
                   </p>
                   {/* « x265 » est le nom d'un encodeur, pas d'un codec : le lecteur et son
                       panneau disent « HEVC » depuis toujours, la fiche disait autre chose. */}

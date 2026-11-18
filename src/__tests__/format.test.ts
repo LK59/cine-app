@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fmtSize, fmtEta, formatResumeTicks, formatDurationShort, relativeTime, relativeTimeAbs, relDate, selectBio } from "@/lib/format";
@@ -22,6 +22,30 @@ describe("fmtSize", () => {
 
   it("garde sa forme d'avant sans langue (la gestion)", () => {
     expect(fmtSize(56.5 * 1024 * 1024)).toBe("56.5 MB");
+  });
+
+  // 18/11/2026 : « 178.8 KB/s », « 10.8 TB libres sur 27.4 TB » dans la gestion en français, quand le
+  // cinéma écrit « 56,5 Mo ». Chaque appel d'un écran donne la langue — `fmtSize` sans langue ne sert plus
+  // qu'aux textes qui ne sont pas à l'écran.
+  it("aucun écran ne l'appelle sans la langue", () => {
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (path.endsWith(".tsx")) {
+          const src = readFileSync(path, "utf8");
+          for (const m of src.matchAll(/\b(?:fmtSize|formatBytes)\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)/g)) {
+            // Les virgules au premier niveau seulement : `fmtSize(Math.max(0, x))` n'a qu'un argument.
+            const topLevel = m[1].replace(/\((?:[^()]|\([^()]*\))*\)/g, "");
+            if (!topLevel.includes(",")) offenders.push(`${path.replace(process.cwd() + "/", "")} : ${m[0]}`);
+          }
+        }
+      }
+    };
+    walk(join(process.cwd(), "src/app"));
+    walk(join(process.cwd(), "src/components"));
+    expect(offenders).toEqual([]);
   });
 
   it("le panneau Compte lui donne la langue", () => {

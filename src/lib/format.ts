@@ -81,7 +81,9 @@ const UNITS = ["B", "KB", "MB", "GB", "TB"];
  * Avec une langue (15/10/2026, passe de nuit, BUREAU-28 / ROBUSTESSE-15), le séparateur et les
  * unités suivent celle de l'écran : « 56.5 MB utilisés » s'affichait au milieu d'une phrase
  * française du panneau Compte. « 56,5 Mo » en français, « 56,5 MB » en allemand et en espagnol,
- * « 56.5 MB » en anglais. Sans langue, la forme d'avant, inchangée — la gestion s'en sert partout.
+ * « 56.5 MB » en anglais. Sans langue, la forme d'avant, inchangée. La gestion donne la langue elle aussi
+ * depuis le 18/11/2026 (« 178.8 KB/s », « 10.8 TB libres » sur une page française) ; `format.test.ts`
+ * refuse un écran qui l'appelle sans.
  */
 export function fmtSize(bytes: number, locale?: string): string {
   if (bytes <= 0) return "—";

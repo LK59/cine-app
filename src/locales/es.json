@@ -1276,7 +1276,31 @@
     "resumed": "Torrent reanudado",
     "actionPause": "Pausar",
     "actionResume": "Reanudar",
-    "actionDelete": "Eliminar"
+    "actionDelete": "Eliminar",
+    "states": {
+      "error": "Error",
+      "missingFiles": "Faltan archivos",
+      "uploading": "Compartiendo",
+      "pausedUP": "Completado, en pausa",
+      "stoppedUP": "Completado, detenido",
+      "queuedUP": "Compartir en cola",
+      "stalledUP": "Compartiendo, inactivo",
+      "checkingUP": "Verificando",
+      "forcedUP": "Compartir forzado",
+      "allocating": "Reservando espacio",
+      "downloading": "Descargando",
+      "metaDL": "Obteniendo metadatos",
+      "forcedMetaDL": "Metadatos, forzado",
+      "pausedDL": "En pausa",
+      "stoppedDL": "Detenido",
+      "queuedDL": "En cola",
+      "stalledDL": "Esperando fuentes",
+      "checkingDL": "Verificando",
+      "forcedDL": "Descarga forzada",
+      "checkingResumeData": "Verificando datos de reanudación",
+      "moving": "Moviendo",
+      "unknown": "Desconocido"
+    }
   },
   "health": {
     "pageTitle": "Estado del sistema",

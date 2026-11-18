@@ -7,7 +7,7 @@ import { Modal } from "@/components/Modal";
 import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
 import { ArrowDown, ArrowUp, Download, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/Toast";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
 
 interface Release {
   guid: string;
@@ -46,6 +46,7 @@ export function ReleaseSearchModal({
 }) {
   const toast = useToast();
   const t = useT();
+  const { locale } = useLocale();
   const [grabbing, setGrabbing] = useState<string | null>(null);
   const [grabbed, setGrabbed] = useState<Set<string>>(new Set());
   const [grabError, setGrabError] = useState<string | null>(null);
@@ -107,7 +108,7 @@ export function ReleaseSearchModal({
                     <span className="badge bg-accent-600/15 text-accent-400">
                       {release.quality?.quality?.name ?? "?"}
                     </span>
-                    <span>{formatBytes(release.size)}</span>
+                    <span>{formatBytes(release.size, locale)}</span>
                     <span>{release.indexer}</span>
                     {release.protocol === "torrent" && (
                       <>

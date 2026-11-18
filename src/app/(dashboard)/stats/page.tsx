@@ -16,7 +16,7 @@ import type { StorageStats } from "@/app/api/stats/storage/route";
 // Une seule règle de rangement des qualités, testée contre la bibliothèque (`stats-buckets.test.ts`).
 import { qualityBucket } from "@/lib/statsBuckets";
 import { fmtSize, relativeTimeAbs } from "@/lib/format";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
 import { useRole } from "@/lib/useRole";
 import type { DiskForecast } from "@/lib/diskForecast";
 
@@ -30,6 +30,7 @@ interface DiskStats {
 
 function ForecastLine({ forecast }: { forecast: DiskForecast | undefined }) {
   const t = useT();
+  const { locale } = useLocale();
   if (!forecast) return null;
 
   // Avant la première analyse, ce n'est pas l'historique qui manque : c'est le calcul qui tourne.
@@ -53,7 +54,7 @@ function ForecastLine({ forecast }: { forecast: DiskForecast | undefined }) {
       : t('stats.storage.forecastStable', { months: String(forecast.monthsUsed) });
     return <div><p className="text-xs text-subtle">{stable}</p>{methodLine}</div>;
   }
-  const rate = fmtSize((forecast.growthBytesPerDay ?? 0) * 7);
+  const rate = fmtSize((forecast.growthBytesPerDay ?? 0) * 7, locale);
   const days = forecast.daysUntilFull ?? 0;
   const key = days < 7 ? 'stats.storage.forecastGrowingSoon' : 'stats.storage.forecastGrowing';
   const color = days < 14 ? "text-danger" : days < 45 ? "text-warning" : "text-muted";
@@ -131,6 +132,7 @@ function useBarTip() {
 
 function MonthlyGrowthChart({ monthlyGrowth }: { monthlyGrowth: { month: string; bytes: number }[] }) {
   const t = useT();
+  const { locale } = useLocale();
   const max = Math.max(...monthlyGrowth.map((m) => m.bytes), 1);
   const chartH = 60;
   const tip = useBarTip();
@@ -144,12 +146,12 @@ function MonthlyGrowthChart({ monthlyGrowth }: { monthlyGrowth: { month: string;
           return (
             <button
               key={m.month}
-              {...tip.barProps(m.month, `${monthLabel(m.month, t)} : ${fmtSize(m.bytes)}`)}
+              {...tip.barProps(m.month, `${monthLabel(m.month, t)} : ${fmtSize(m.bytes, locale)}`)}
               className="group relative flex flex-1 flex-col items-center gap-1 rounded-sm focus-visible:outline-none"
             >
               {m.bytes > 0 && (
                 <span className={`pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg bg-surface px-1.5 py-0.5 text-[11px] text-white shadow-glow transition-opacity ${tip.tipClass(m.month)}`}>
-                  {fmtSize(m.bytes)}
+                  {fmtSize(m.bytes, locale)}
                 </span>
               )}
               <span className="block w-full rounded-t-sm bg-white/60" style={{ height: `${barPx}px` }} />
@@ -286,6 +288,7 @@ function ListCard({ icon: Icon, iconColor, title, count, emptyLabel, legend, chi
 
 function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefresh: () => void }) {
   const t = useT();
+  const { locale } = useLocale();
   const movieMax = Math.max(storage.movieFiles.total, 1);
   const seriesMax = Math.max(storage.seriesFiles.total, 1);
 
@@ -329,7 +332,7 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
           <HBar label={t('stats.storage.hardlinkSeries')} value={storage.seriesFiles.hardlinked} max={seriesMax}
             color="bg-sky-500" fmt={() => t('stats.storage.hardlinkCount', { linked: storage.seriesFiles.hardlinked, total: storage.seriesFiles.total })} />
         </div>
-        <StatCard icon={HardDrive} label={t('stats.storage.seedOrphans')} value={fmtSize(storage.seedOrphanBytes)}
+        <StatCard icon={HardDrive} label={t('stats.storage.seedOrphans')} value={fmtSize(storage.seedOrphanBytes, locale)}
           sub={t('stats.storage.seedOrphanCount', { n: storage.seedOrphans.length })} color="text-danger" />
       </div>
 
@@ -365,7 +368,7 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
                       {t('stats.storage.trueOrphan')}
                     </span>
                   )}
-                  <span className="text-subtle">{fmtSize(item.sizeBytes)}</span>
+                  <span className="text-subtle">{fmtSize(item.sizeBytes, locale)}</span>
                 </span>
               </div>
               <div className="mt-0.5 pl-2 text-[11px] text-subtle">
@@ -383,12 +386,12 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
             <div key={i} className="text-xs">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-muted" title={item.title}>{item.title}</span>
-                <span className="shrink-0 text-warning">{t('stats.storage.duplicatesWasted', { n: fmtSize(item.wastedBytes) })}</span>
+                <span className="shrink-0 text-warning">{t('stats.storage.duplicatesWasted', { n: fmtSize(item.wastedBytes, locale) })}</span>
               </div>
               <div className="mt-0.5 pl-2 text-[11px] text-subtle">
                 {item.releases.map((r) => (
                   <div key={r.relativePath} className="break-all">
-                    {r.name} ({fmtSize(r.sizeBytes)}){r.inLibrary ? "" : ` · ${t('stats.storage.seedCopy')}`}
+                    {r.name} ({fmtSize(r.sizeBytes, locale)}){r.inLibrary ? "" : ` · ${t('stats.storage.seedCopy')}`}
                   </div>
                 ))}
               </div>
@@ -410,7 +413,7 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
                 <details key={group.tracker} className="group">
                   <summary className="flex cursor-pointer items-center justify-between gap-2 text-xs text-muted marker:content-none">
                     <span className="font-medium">{group.tracker}</span>
-                    <span className="text-subtle">{group.files.length} · {fmtSize(group.totalBytes)}</span>
+                    <span className="text-subtle">{group.files.length} · {fmtSize(group.totalBytes, locale)}</span>
                   </summary>
                   <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto pl-2 pr-1">
                     {group.files.map((f, i) => (
@@ -418,7 +421,7 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
                         <span className="truncate text-muted" title={f.relativePath}>{f.title}</span>
                         <span className="shrink-0 flex items-center gap-1.5">
                           {!f.linkedToLibrary && <span className="text-danger">{t('stats.storage.notLinked')}</span>}
-                          <span className="text-subtle">{fmtSize(f.sizeBytes)}</span>
+                          <span className="text-subtle">{fmtSize(f.sizeBytes, locale)}</span>
                         </span>
                       </div>
                     ))}
@@ -434,7 +437,7 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
           {storage.heaviestH264.map((item, i) => (
             <div key={i} className="flex items-center justify-between gap-2 text-xs">
               <span className="truncate text-muted" title={item.title}>{item.title}</span>
-              <span className="shrink-0 text-orange-400">{fmtSize(item.sizeBytes)}</span>
+              <span className="shrink-0 text-orange-400">{fmtSize(item.sizeBytes, locale)}</span>
             </div>
           ))}
         </ListCard>
@@ -445,7 +448,7 @@ function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefre
         {storage.notHardlinked.map((item, i) => (
           <div key={i} className="flex items-center justify-between gap-2 text-xs">
             <span className="truncate text-muted" title={item.fileName}>{item.title}</span>
-            <span className="shrink-0 text-subtle">{fmtSize(item.sizeBytes)}</span>
+            <span className="shrink-0 text-subtle">{fmtSize(item.sizeBytes, locale)}</span>
           </div>
         ))}
       </ListCard>
@@ -457,6 +460,7 @@ const CHART_H = 120;
 
 export default function StatsPage() {
   const t = useT();
+  const { locale } = useLocale();
   const { role } = useRole();
   const isAdmin = role === "admin";
   const { data: lib, error: libError, isLoading, mutate: retryLib } = useSWR<LibraryStats>(
@@ -551,8 +555,8 @@ export default function StatsPage() {
               sub={t('stats.episodesOf', { n: lib.series.totalEpisodes.toLocaleString() })}
               color="text-success" />
             <StatCard icon={HardDrive} label={t('stats.cards.storage')}
-              value={disk ? fmtSize(disk.moviesBytes + disk.tvBytes) : "—"}
-              sub={disk && disk.disk.total > 0 ? t('stats.cards.free', { n: fmtSize(disk.disk.free) }) : undefined}
+              value={disk ? fmtSize(disk.moviesBytes + disk.tvBytes, locale) : "—"}
+              sub={disk && disk.disk.total > 0 ? t('stats.cards.free', { n: fmtSize(disk.disk.free, locale) }) : undefined}
               color="text-warning" />
           </div>
 
@@ -564,15 +568,15 @@ export default function StatsPage() {
                 <div className="mb-1 flex h-3 w-full overflow-hidden rounded-full bg-white/10">
                   {disk.moviesBytes > 0 && (
                     <div className="h-full bg-accent-500" style={{ width: `${(disk.moviesBytes / disk.disk.total) * 100}%` }}
-                      title={`${t('stats.diskLegend.movies')} : ${fmtSize(disk.moviesBytes)}`} />
+                      title={`${t('stats.diskLegend.movies')} : ${fmtSize(disk.moviesBytes, locale)}`} />
                   )}
                   {disk.tvBytes > 0 && (
                     <div className="h-full bg-sky-500" style={{ width: `${(disk.tvBytes / disk.disk.total) * 100}%` }}
-                      title={`${t('stats.diskLegend.series')} : ${fmtSize(disk.tvBytes)}`} />
+                      title={`${t('stats.diskLegend.series')} : ${fmtSize(disk.tvBytes, locale)}`} />
                   )}
                   {disk.seedsBytes > 0 && (
                     <div className="h-full bg-amber-500" style={{ width: `${(disk.seedsBytes / disk.disk.total) * 100}%` }}
-                      title={`${t('stats.diskLegend.seeds')} : ${fmtSize(disk.seedsBytes)}`} />
+                      title={`${t('stats.diskLegend.seeds')} : ${fmtSize(disk.seedsBytes, locale)}`} />
                   )}
                   {disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes > 0 && (
                     <div className="h-full bg-white/20"
@@ -580,10 +584,10 @@ export default function StatsPage() {
                   )}
                 </div>
                 <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted">
-                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" />{t('stats.diskLegend.movies')} — {fmtSize(disk.moviesBytes)}</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />{t('stats.diskLegend.series')} — {fmtSize(disk.tvBytes)}</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />{t('stats.diskLegend.seeds')} — {fmtSize(disk.seedsBytes)}</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-white/20" />{t('stats.diskLegend.other')} — {fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes))}</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" />{t('stats.diskLegend.movies')} — {fmtSize(disk.moviesBytes, locale)}</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />{t('stats.diskLegend.series')} — {fmtSize(disk.tvBytes, locale)}</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />{t('stats.diskLegend.seeds')} — {fmtSize(disk.seedsBytes, locale)}</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-white/20" />{t('stats.diskLegend.other')} — {fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes), locale)}</span>
                   <span className="ml-auto text-subtle">{t('stats.diskUsed', { pct: ((disk.disk.used / disk.disk.total) * 100).toFixed(1) })}</span>
                 </div>
                 {/* La prévision, une seule fois, ici (13/11/2026) — et le graphique des imports qui

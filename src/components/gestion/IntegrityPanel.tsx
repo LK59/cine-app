@@ -94,7 +94,7 @@ export function IntegrityPanel() {
             </div>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
               <Fact label={t("libraryCheck.integrity.files")} value={`${run.done} / ${run.total}`} />
-              <Fact label={t("libraryCheck.integrity.read")} value={`${fmtSize(run.bytesRead)} / ${fmtSize(run.bytesTotal)}`} />
+              <Fact label={t("libraryCheck.integrity.read")} value={`${fmtSize(run.bytesRead, locale)} / ${fmtSize(run.bytesTotal, locale)}`} />
               <Fact label={t("libraryCheck.integrity.eta")} value={data?.etaMs != null ? fmtEta(Math.round(data.etaMs / 1000)) : "—"} />
               <Fact label={t("libraryCheck.integrity.damagedCount")} value={String(run.damaged)} />
             </dl>

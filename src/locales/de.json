@@ -1276,7 +1276,31 @@
     "resumed": "Torrent fortgesetzt",
     "actionPause": "Pausieren",
     "actionResume": "Fortsetzen",
-    "actionDelete": "Löschen"
+    "actionDelete": "Löschen",
+    "states": {
+      "error": "Fehler",
+      "missingFiles": "Dateien fehlen",
+      "uploading": "Wird geteilt",
+      "pausedUP": "Fertig, pausiert",
+      "stoppedUP": "Fertig, gestoppt",
+      "queuedUP": "Teilen in Warteschlange",
+      "stalledUP": "Teilen, untätig",
+      "checkingUP": "Wird geprüft",
+      "forcedUP": "Erzwungenes Teilen",
+      "allocating": "Speicher wird reserviert",
+      "downloading": "Wird heruntergeladen",
+      "metaDL": "Metadaten werden geladen",
+      "forcedMetaDL": "Metadaten, erzwungen",
+      "pausedDL": "Pausiert",
+      "stoppedDL": "Gestoppt",
+      "queuedDL": "In Warteschlange",
+      "stalledDL": "Wartet auf Quellen",
+      "checkingDL": "Wird geprüft",
+      "forcedDL": "Erzwungener Download",
+      "checkingResumeData": "Fortsetzungsdaten werden geprüft",
+      "moving": "Wird verschoben",
+      "unknown": "Unbekannt"
+    }
   },
   "health": {
     "pageTitle": "Systemstatus",

@@ -1276,7 +1276,31 @@
     "resumed": "Torrent relancé",
     "actionPause": "Mettre en pause",
     "actionResume": "Relancer",
-    "actionDelete": "Supprimer"
+    "actionDelete": "Supprimer",
+    "states": {
+      "error": "Erreur",
+      "missingFiles": "Fichiers manquants",
+      "uploading": "Partage",
+      "pausedUP": "Terminé, en pause",
+      "stoppedUP": "Terminé, arrêté",
+      "queuedUP": "Partage en file d'attente",
+      "stalledUP": "Partage, sans demande",
+      "checkingUP": "Vérification",
+      "forcedUP": "Partage forcé",
+      "allocating": "Allocation de l'espace",
+      "downloading": "Téléchargement",
+      "metaDL": "Récupération des métadonnées",
+      "forcedMetaDL": "Métadonnées, forcé",
+      "pausedDL": "En pause",
+      "stoppedDL": "Arrêté",
+      "queuedDL": "En file d'attente",
+      "stalledDL": "En attente de sources",
+      "checkingDL": "Vérification",
+      "forcedDL": "Téléchargement forcé",
+      "checkingResumeData": "Vérification au démarrage",
+      "moving": "Déplacement",
+      "unknown": "Inconnu"
+    }
   },
   "health": {
     "pageTitle": "Santé système",

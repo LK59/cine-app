@@ -30,7 +30,7 @@ import {
   PackageCheck,
   ScanSearch,
 } from "lucide-react";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
 import { PageHeader } from "@/components/PageHeader";
 import { Panel } from "@/components/activity/parts";
 import type { DashboardPayload, ServiceStatus, ActivityItem, TorrentItem } from "@/app/api/dashboard/route";
@@ -112,6 +112,7 @@ function SkeletonPanels() {
 /** Les téléchargements en cours — une ligne chacun, quatre au plus, la suite chez qBittorrent. */
 function TorrentsSection({ torrents }: { torrents: TorrentItem[] }) {
   const t = useT();
+  const { locale } = useLocale();
   const active = torrents.filter((item) => ["downloading", "stalledDL", "metaDL", "forcedDL"].includes(item.state));
   const shown = active.slice(0, 4);
   return (
@@ -131,7 +132,7 @@ function TorrentsSection({ torrents }: { torrents: TorrentItem[] }) {
         <div className="divide-y divide-white/5">
           {shown.map((torrent) => {
             const pct = Math.round(torrent.progress * 100);
-            const speed = torrent.dlspeed > 0 ? `${fmtSize(torrent.dlspeed)}/s` : null;
+            const speed = torrent.dlspeed > 0 ? `${fmtSize(torrent.dlspeed, locale)}/s` : null;
             const eta = torrent.eta > 0 && torrent.eta < 86400 * 7
               ? torrent.eta < 3600 ? `${Math.ceil(torrent.eta / 60)} min` : `${(torrent.eta / 3600).toFixed(1)} h`
               : null;
@@ -266,6 +267,7 @@ function TorrentsNotConfigured() {
 
 function DiskSection({ disk, updatedAt, computing }: { disk: DiskStats; updatedAt: number | null; computing: boolean }) {
   const t = useT();
+  const { locale } = useLocale();
   const other = Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes);
   const share = (bytes: number) => `${(bytes / disk.disk.total) * 100}%`;
   return (
@@ -287,7 +289,7 @@ function DiskSection({ disk, updatedAt, computing }: { disk: DiskStats; updatedA
         <p className="px-4 py-6 text-sm text-subtle">{t('dashboard.computingStorage')}</p>
       ) : (
         <div className="p-4">
-          <p className="mb-3 text-sm text-muted">{t('dashboard.storageFree', { free: fmtSize(disk.disk.free), total: fmtSize(disk.disk.total) })}</p>
+          <p className="mb-3 text-sm text-muted">{t('dashboard.storageFree', { free: fmtSize(disk.disk.free, locale), total: fmtSize(disk.disk.total, locale) })}</p>
           {/* La légende dessous dit chaque part en clair : la barre n'a pas besoin d'infobulle,
               qu'un doigt n'aurait de toute façon jamais fait apparaître. */}
           <div className="mb-1 flex h-3 w-full overflow-hidden rounded-full bg-white/10" aria-hidden>
@@ -297,10 +299,10 @@ function DiskSection({ disk, updatedAt, computing }: { disk: DiskStats; updatedA
             {other > 0 && <div className="h-full bg-white/30" style={{ width: share(other) }} />}
           </div>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted">
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" />{t('dashboard.storageFilms', { size: fmtSize(disk.moviesBytes) })}</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />{t('dashboard.storageSeries', { size: fmtSize(disk.tvBytes) })}</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />{t('dashboard.storageSeeds', { size: fmtSize(disk.seedsBytes) })}</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-white/30" />{t('dashboard.storageOther', { size: fmtSize(other) })}</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent-500" />{t('dashboard.storageFilms', { size: fmtSize(disk.moviesBytes, locale) })}</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />{t('dashboard.storageSeries', { size: fmtSize(disk.tvBytes, locale) })}</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />{t('dashboard.storageSeeds', { size: fmtSize(disk.seedsBytes, locale) })}</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-white/30" />{t('dashboard.storageOther', { size: fmtSize(other, locale) })}</span>
             <span className="ml-auto text-subtle">{t('dashboard.storageUsed', { pct: ((disk.disk.used / disk.disk.total) * 100).toFixed(1) })}</span>
           </div>
           <Link prefetch={false} href="/stats" className="mt-3 inline-flex items-center gap-0.5 text-xs text-subtle hover:text-muted">

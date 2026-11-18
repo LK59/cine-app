@@ -10,7 +10,8 @@ import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
 import { Pause, Play, Trash2, ArrowDown, ArrowUp, Search, ChevronDown } from "lucide-react";
 import type { QbTorrent } from "@/lib/clients/qbittorrent";
 import { useRole } from "@/lib/useRole";
-import { useT } from "@/components/TranslationProvider";
+import { useT, useLocale } from "@/components/TranslationProvider";
+import { torrentStateLabel } from "@/lib/torrentState";
 import { INTERVALS } from "@/lib/refresh-intervals";
 import { useEffect, useMemo, useState } from "react";
 import { TorrentDetailModal } from "@/components/TorrentDetailModal";
@@ -69,6 +70,7 @@ export default function QbittorrentPage() {
   const { mutate } = useSWRConfig();
   const { isReadOnly } = useRole();
   const t = useT();
+  const { locale } = useLocale();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -188,7 +190,7 @@ export default function QbittorrentPage() {
         title={t('qbittorrent.pageTitle')}
         subtitle={
           transfer
-            ? `↓ ${formatBytes(transfer.dl_info_speed)}/s · ↑ ${formatBytes(transfer.up_info_speed)}/s`
+            ? `↓ ${formatBytes(transfer.dl_info_speed, locale)}/s · ↑ ${formatBytes(transfer.up_info_speed, locale)}/s`
             : undefined
         }
       />
@@ -293,15 +295,15 @@ export default function QbittorrentPage() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-white">{torrent.name}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-subtle">
-                  <span>{formatBytes(torrent.size)}</span>
+                  <span>{formatBytes(torrent.size, locale)}</span>
                   <span className="flex items-center gap-1 text-success">
-                    <ArrowDown size={12} /> {formatBytes(torrent.dlspeed)}/s
+                    <ArrowDown size={12} /> {formatBytes(torrent.dlspeed, locale)}/s
                   </span>
                   <span className="flex items-center gap-1 text-accent-400">
-                    <ArrowUp size={12} /> {formatBytes(torrent.upspeed)}/s
+                    <ArrowUp size={12} /> {formatBytes(torrent.upspeed, locale)}/s
                   </span>
                   {curPriority === 0 && <span>{t('qbittorrent.eta')} {fmtEta(torrent.eta)}</span>}
-                  <span className="capitalize">{torrent.state}</span>
+                  <span>{torrentStateLabel(torrent.state, t)}</span>
                 </div>
                 <div className="mt-2 h-1.5 w-full rounded-full bg-white/10">
                   {/* Glisse d'un rafraîchissement au suivant (toutes les cinq secondes) au lieu de
