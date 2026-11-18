@@ -61,9 +61,9 @@ fetch POST /api/jellyfin/playback/progress {"client":"Lumen by Laterna","itemId"
 log seek {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","from":138,"to":148,"buffered":false,"ranges":"vide","tookMs":800,"steps":""}
 step → → sans attendre
 media video currentTime= 160
-log seek {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","from":150,"to":160,"buffered":false,"ranges":"vide","superseded":true,"landedAt":160,"tookMs":100,"steps":""}
+log seek {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","from":150,"to":160,"buffered":false,"ranges":"vide","superseded":true,"landedAt":160,"tookMs":350,"steps":""}
 media video currentTime= 170
-log seek {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","from":150,"to":170,"buffered":false,"ranges":"vide","tookMs":400,"steps":""}
+log seek {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","from":150,"to":170,"buffered":false,"ranges":"vide","tookMs":150,"steps":""}
 fetch POST /api/jellyfin/playback/progress {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1700000000,"isPaused":false,"visible":true}
 step pause (espace)
 media video pause
@@ -102,7 +102,7 @@ dom saut en pause
     button "player.moreOptions"
     input "player.seekLabel" type=range value=162 valuetext=player.seekValue:{"at":"2:42","total":"1:00:00"}
 step croix
-beacon /api/player/log stop {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","why":"close","at":162,"watched":14,"ended":false,"rebuild":0,"audio":1,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":4,"seekWaitMs":1800,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{"netMB":0,"recvMbps":0,"linkMbps":0,"linkBusyPct":0,"req":0,"readWaitS":0,"buildS":0,"audioS":0,"appendS":0,"longTaskS":0,"longTasks":0,"lagMaxMs":0,"slowestMs":0,"linkVerdict":"inconnue","linkS":0,"cores":12},"diag.beatPos":170,"diag.beatAgoS":2,"timeline":"124,5,0,0,-,L;148,10,0,0,-,L;162,14,0,0,-,P"}
+beacon /api/player/log stop {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","why":"close","at":162,"watched":14,"ended":false,"rebuild":0,"audio":1,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":4,"seekWaitMs":1550,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{"netMB":0,"recvMbps":0,"linkMbps":0,"linkBusyPct":0,"req":0,"readWaitS":0,"buildS":0,"audioS":0,"appendS":0,"longTaskS":0,"longTasks":0,"lagMaxMs":0,"slowestMs":0,"linkVerdict":"inconnue","linkS":0,"cores":12},"diag.beatPos":170,"diag.beatAgoS":2,"timeline":"124,5,0,0,-,L;148,10,0,0,-,L;162,14,0,0,-,P"}
 storage local remove cine:unsent-stop:00000001
 keepOnStop
 fetch POST /api/jellyfin/playback/stop {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1620000000,"isPaused":false,"visible":true}
