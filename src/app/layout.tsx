@@ -123,7 +123,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // la porte des liens refusera — voir `ShareMode`. Faux pour tout compte du foyer.
   const shareMode = session?.role === "share";
   const lang: Locale = LOCALES.includes(rawLang as Locale) ? rawLang as Locale : "fr";
-  const dict = await loadLocaleDict(lang);
+  // Le dictionnaire voyage avec la page seulement pour une autre langue que le français (18/11/2026) : le français
+  // est déjà dans le code du client (`TranslationProvider`, filet de toutes les langues), mis en cache et gardé par
+  // le service worker. Passé ici, il partait EN PLUS dans chaque page HTML — 55 Ko gzip sur 68 à chaque ouverture,
+  // avant que l'hydratation puisse commencer (enquête sur le démarrage, 18/11/2026).
+  const dict = lang === "fr" ? undefined : await loadLocaleDict(lang);
   // Le lecteur de livres posé sur le cinéma est ce même document dans un cadre (DECISIONS.md §128) : le
   // cinéma porte déjà la présence, la maintenance, le contrôle de version et l'invitation à installer.
   // Montés aussi dans le cadre (29/10/2026), ils comptaient l'appareil deux fois, l'envoyaient « en
