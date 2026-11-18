@@ -35,7 +35,6 @@ import type { OfflineQuality } from "@/lib/offline/quality";
 import type { CinemaEpisode, CinemaSeason } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import {
   AutoNextToggle,
-  BetaBadge,
   OfflineChoiceSheet,
   ProgressRing,
   QualityPicker,
@@ -450,7 +449,6 @@ function OfflineSeasonDownloadOn({
       >
         <div className="space-y-4 border-b border-white/10 px-4 py-3">
           <div className="flex justify-end">
-            <BetaBadge />
           </div>
           <div>
             <p className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">{t("player.downloads.language")}</p>

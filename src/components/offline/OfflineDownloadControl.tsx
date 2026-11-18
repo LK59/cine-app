@@ -42,11 +42,6 @@ import type { CinemaEpisode, CinemaSeason } from "@/app/api/cinema/series/[jelly
  * devient « Lire le fichier téléchargé ». La suppression se fait dans le gestionnaire.
  */
 
-export function BetaBadge() {
-  const t = useT();
-  return <span className="rounded-full bg-white/15 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-muted">{t("player.downloads.beta")}</span>;
-}
-
 /** HEVC si ce navigateur le confie à MediaSource, sinon H.264 — ce que le lecteur hors ligne lira. */
 export function offlineCodec(): OfflineCodec {
   const hevc = 'video/mp4; codecs="hvc1.1.6.L120.90,mp4a.40.2"';
@@ -320,7 +315,6 @@ function OfflineDownloadControlOn({ variant, rowClassName = "", badgeClassName =
         <button type="button" data-detail-menu onClick={onClick} className={rowClassName}>
           <span className={badgeClassName}>{icon}</span>
           <span className="text-sm font-medium">{label}</span>
-          <BetaBadge />
         </button>
       ) : (
         <button
@@ -331,7 +325,6 @@ function OfflineDownloadControlOn({ variant, rowClassName = "", badgeClassName =
         >
           {icon}
           {label}
-          <BetaBadge />
         </button>
       )}
       <OfflineChoiceSheet open={choosing} onClose={() => setChoosing(false)} {...title} />
@@ -539,7 +532,6 @@ export function OfflineChoiceSheet({
     >
       <div className="space-y-4 border-b border-white/10 px-4 py-3">
         <div className="flex justify-end">
-          <BetaBadge />
         </div>
         <div>
           <p className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">{t("player.downloads.audio")}</p>

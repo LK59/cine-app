@@ -22,7 +22,6 @@ vi.mock("@/lib/persistentCache", () => ({ adoptSignedOutAccount: (a: string) => 
 vi.mock("@/lib/offline/deviceStore", () => ({ deviceStoreSupported: () => true }));
 vi.mock("@/lib/offline/downloads", () => ({ initOfflineDownloads: () => init(), offlineAccount: () => account }));
 vi.mock("@/components/offline/OfflineDownloadsView", () => ({ OfflineDownloadsView: () => <p>liste des téléchargements</p> }));
-vi.mock("@/components/offline/OfflineDownloadControl", () => ({ BetaBadge: () => <span>bêta</span> }));
 
 import { deviceKeepsDownloads, forgetOfflineAccount, rememberOfflineAccount, rememberedOfflineAccount, OFFLINE_BOOKS_COUNT_KEY, OFFLINE_ENTRY_PATH } from "@/lib/offline/offlineEntry";
 import { OfflineEntryScreen } from "@/components/offline/OfflineEntryScreen";

@@ -47,15 +47,6 @@ export function SubtitleStyleGroup<T extends string | number>({
   );
 }
 
-/** « Bêta », le même badge que la diffusion Chromecast — à retirer quand le réglage aura fait ses preuves. */
-export function DialogueBeta() {
-  const t = useT();
-  return (
-    <span className="shrink-0 rounded-full border border-white/20 px-1.5 py-px text-[11px] font-semibold uppercase leading-4 tracking-wider text-white/70">
-      {t("player.chromecast.beta")}
-    </span>
-  );
-}
 
 /**
  * Un décalage de sous-titres : l'intitulé, −0,5 s, la valeur, +0,5 s. Le même pour le principal et

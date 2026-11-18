@@ -2,7 +2,6 @@
 
 import { useT } from "@/components/TranslationProvider";
 import { openLibraryTitle } from "@/lib/cinemaRoute";
-import { BetaBadge } from "@/components/offline/OfflineDownloadControl";
 import { OfflineDownloadsView } from "@/components/offline/OfflineDownloadsView";
 import { PlayerPanelFrame } from "./PlayerPanelFrame";
 
@@ -22,7 +21,6 @@ export function PlayerDownloadsPanel({ leaving }: { leaving?: boolean }) {
       title={t("player.downloads.manager")}
       subtitle={
         <span className="flex items-center gap-2">
-          <BetaBadge />
           {t("player.downloads.panelHint")}
         </span>
       }

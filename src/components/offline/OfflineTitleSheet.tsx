@@ -25,7 +25,7 @@ import { detailColumnMotion, phoneSheetCorner, phoneSheetFollow, phoneSheetShado
 import { pauseOfflineDownload, removeOfflineDownload, resumeOfflineDownload, retryOfflineDownload, type OfflineDownload } from "@/lib/offline/downloads";
 import { offlineRemainingSeconds, offlineSeriesNext, type OfflineSeriesGroup } from "@/lib/offline/downloadGroups";
 import { BACKDROP_FILE, LOGO_FILE, POSTER_FILE } from "@/lib/offline/artwork";
-import { BetaBadge, OfflinePlayButton, offlinePlayable, offlineProgress, offlineStatusLabel } from "./OfflineDownloadControl";
+import { OfflinePlayButton, offlinePlayable, offlineProgress, offlineStatusLabel } from "./OfflineDownloadControl";
 import { DownloadStateButton } from "./OfflineEpisodeDownload";
 import { useOfflineImage } from "./useOfflineImage";
 import { setOfflineSheetOpen } from "@/lib/offline/offlineSheetOpen";
@@ -231,7 +231,6 @@ export function OfflineTitleSheet({
               {metaItems.map((m) => (
                 <span key={String(m)}>{m}</span>
               ))}
-              <BetaBadge />
             </div>
 
             {next && next.state !== "failed" && <OfflinePlayButton download={next} variant="wide" episodeCode={nextCode} />}
@@ -348,7 +347,6 @@ export function OfflineTitleSheet({
                 {metaItems.map((m) => (
                   <span key={String(m)}>{m}</span>
                 ))}
-                <BetaBadge />
               </div>
               {facts?.overview && <CinemaOverview text={facts.overview} readMore={t("cinema.readMore")} maxLines={5} onOpen={() => setOverviewOpen(true)} />}
               {cast}

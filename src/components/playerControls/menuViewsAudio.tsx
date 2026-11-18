@@ -6,7 +6,7 @@
 
 import { ChevronRight, Speech } from "lucide-react";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
-import { DialogueBeta, MenuOption } from "@/components/playerControls/menuRows";
+import { MenuOption } from "@/components/playerControls/menuRows";
 import { pickPrimary } from "@/components/playerControls/menuViewsDual";
 import type { MenuViewContext } from "@/components/playerControls/PlayerSettingsMenu";
 
@@ -69,7 +69,6 @@ export function dialogueRowView({ t, setMenu, dialogue }: MenuViewContext) {
           <span className="flex min-w-0 items-center gap-2">
             <Speech size={16} className="shrink-0" />
             <span className="truncate">{t("player.dialogue.title")}</span>
-            <DialogueBeta />
           </span>
           <ChevronRight size={14} className="shrink-0 text-white/50" />
         </button>

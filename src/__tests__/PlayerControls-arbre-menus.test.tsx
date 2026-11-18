@@ -154,7 +154,7 @@ const VIEWS: Record<string, View> = {
     path: [["nav", "audio"]],
     title: "player.audio",
     parent: null,
-    rows: ["Français", "Anglais", "player.dialogue.titleplayer.chromecast.beta"],
+    rows: ["Français", "Anglais", "player.dialogue.title"],
     checked: ["Français"],
   },
   dialogue: {

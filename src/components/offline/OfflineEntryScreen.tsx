@@ -8,7 +8,6 @@ import { adoptSignedOutAccount } from "@/lib/persistentCache";
 import { deviceStoreSupported } from "@/lib/offline/deviceStore";
 import { initOfflineDownloads, offlineAccount } from "@/lib/offline/downloads";
 import { keptBooksCount, rememberedOfflineAccount } from "@/lib/offline/offlineEntry";
-import { BetaBadge } from "./OfflineDownloadControl";
 import { OfflineDownloadsView } from "./OfflineDownloadsView";
 import { afterForegroundCheck } from "@/lib/foregroundGate";
 
@@ -81,7 +80,6 @@ export function OfflineEntryScreen() {
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-display text-2xl font-semibold text-white sm:text-3xl">{t("player.downloads.manager")}</h1>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted">
-              <BetaBadge />
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${online ? "bg-success" : "bg-warning"}`} aria-hidden />
               <span className="truncate">{online ? t("player.downloads.entryOnline") : t("player.downloads.entryOffline")}</span>
             </p>

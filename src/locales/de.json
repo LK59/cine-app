@@ -2731,7 +2731,6 @@
       "file": "Datei herunterladen"
     },
     "downloads": {
-      "beta": "Beta",
       "download": "Herunterladen",
       "sheetTitle": "Zum Offline-Ansehen herunterladen",
       "audio": "Tonspur",
@@ -3527,7 +3526,7 @@
       "COOKIE_SECURE": "Über HTTPS ausgeliefert (sichere Cookies)",
       "PLAYER_ENABLED": "Integrierter Player",
       "PLAYER_SERVER_FALLBACK": "Dateien, die der Browser nicht abspielt, an Jellyfin übergeben",
-      "OFFLINE_DOWNLOADS": "Offline-Downloads in der App (Beta)",
+      "OFFLINE_DOWNLOADS": "Offline-Downloads in der App",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Offline-Downloads für alle Konten (sonst nur Administratoren)",
       "BOOKS_ENABLED": "Bücher: die EPUB-Dateien von Jellyfin und ein Lesemodus in der App (Beta)",
       "BOOKS_REQUESTS_ENABLED": "Buchwünsche: „Buch wünschen“, von der Administration von Hand bearbeitet",

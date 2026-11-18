@@ -2731,7 +2731,6 @@
       "file": "Descargar el archivo"
     },
     "downloads": {
-      "beta": "Beta",
       "download": "Descargar",
       "sheetTitle": "Descargar para ver sin conexión",
       "audio": "Pista de audio",
@@ -3527,7 +3526,7 @@
       "COOKIE_SECURE": "Servida en HTTPS (cookies seguras)",
       "PLAYER_ENABLED": "Reproductor integrado",
       "PLAYER_SERVER_FALLBACK": "Pasar a Jellyfin los archivos que el navegador no reproduce",
-      "OFFLINE_DOWNLOADS": "Descargas sin conexión en la app (beta)",
+      "OFFLINE_DOWNLOADS": "Descargas sin conexión en la app",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Descargas sin conexión abiertas a todas las cuentas (si no, solo administradores)",
       "BOOKS_ENABLED": "Libros: los EPUB de Jellyfin y un lector en la app (beta)",
       "BOOKS_REQUESTS_ENABLED": "Solicitudes de libros: «Solicitar un libro», gestionadas a mano por el administrador",

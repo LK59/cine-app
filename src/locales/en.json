@@ -2731,7 +2731,6 @@
       "file": "Download file"
     },
     "downloads": {
-      "beta": "Beta",
       "download": "Download",
       "sheetTitle": "Download to watch offline",
       "audio": "Audio track",
@@ -3527,7 +3526,7 @@
       "COOKIE_SECURE": "Served over HTTPS (secure cookies)",
       "PLAYER_ENABLED": "Built-in player",
       "PLAYER_SERVER_FALLBACK": "Hand files the browser can't play over to Jellyfin",
-      "OFFLINE_DOWNLOADS": "Offline downloads in the app (beta)",
+      "OFFLINE_DOWNLOADS": "Offline downloads in the app",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Offline downloads open to every account (otherwise administrators only)",
       "BOOKS_ENABLED": "Books: Jellyfin's EPUB files and an in-app reader (beta)",
       "BOOKS_REQUESTS_ENABLED": "Book requests: “Request a book”, handled by hand by the administrator",

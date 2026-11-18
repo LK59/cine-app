@@ -1579,12 +1579,12 @@ describe("améliorer les dialogues", () => {
     expect(screen.queryByText(/player\.dialogue\.title/)).toBeNull();
   });
 
-  it("sous les pistes audio, même d'un film à une seule piste ; Bêta, sans état coupé ; les trois choix de l'Apple TV", async () => {
+  it("sous les pistes audio, même d'un film à une seule piste ; sans « Bêta » (18/11/2026) ni état coupé ; les trois choix de l'Apple TV", async () => {
     const container = await openAudio({ dialogue: { mode: "off", applies: true, onChange: vi.fn() } });
     expect(screen.getByText("Anglais — 5.1")).toBeTruthy();
     const row = container.querySelector("[data-dialogue-row]")!;
     expect(row.textContent).toContain("player.dialogue.title");
-    expect(row.textContent).toContain("player.chromecast.beta");
+    expect(row.textContent).not.toContain("player.chromecast.beta");
     expect(row.textContent).not.toContain("·");
     await act(async () => void fireEvent.click(row));
     const choices = [...document.querySelectorAll("[data-dialogue-choice]")];

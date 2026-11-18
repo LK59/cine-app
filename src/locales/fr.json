@@ -2731,7 +2731,6 @@
       "file": "Télécharger le fichier"
     },
     "downloads": {
-      "beta": "Bêta",
       "download": "Télécharger",
       "sheetTitle": "Télécharger pour regarder hors ligne",
       "audio": "Piste audio",
@@ -3527,7 +3526,7 @@
       "COOKIE_SECURE": "Servie en HTTPS (cookies sécurisés)",
       "PLAYER_ENABLED": "Lecteur intégré",
       "PLAYER_SERVER_FALLBACK": "Relais vers Jellyfin pour les fichiers que le navigateur ne lit pas",
-      "OFFLINE_DOWNLOADS": "Téléchargement hors ligne dans l'application (bêta)",
+      "OFFLINE_DOWNLOADS": "Téléchargement hors ligne dans l'application",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Téléchargement hors ligne ouvert à tous les comptes (sinon administrateurs seulement)",
       "BOOKS_ENABLED": "Livres : les EPUB de Jellyfin et un lecteur dans l'application (bêta)",
       "BOOKS_REQUESTS_ENABLED": "Demandes de livres : « Demander un livre », traité à la main par l'administrateur",
