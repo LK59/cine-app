@@ -293,6 +293,27 @@ describe("arrière-plan puis retour : l'ordre des trois écouteurs", () => {
     expect(logged("stop")[0].fields).toMatchObject({ backgrounds: 2, backgroundMs: 120_000, backgroundRebuilds: 1 });
   });
 
+  it("un `timeupdate` à zéro sans saut (décodeur WebKit qui lâche) n'efface pas la position : la reconstruction reprend où en était le film", async () => {
+    // *Aftersun* sur iPad (WebKit émulé, chasse du 18/11/2026) : à 3 588 s, l'élément annonce 0 juste
+    // avant de perdre sa source, et la reconstruction repartait du début du film.
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    await ready();
+    const element = videoElement(3588);
+    await act(async () => void fireEvent(element, new Event("play")));
+    await act(async () => void fireEvent(element, new Event("timeupdate")));
+    Object.defineProperty(element, "currentTime", { value: 0, writable: true, configurable: true });
+    await act(async () => void fireEvent(element, new Event("timeupdate")));
+
+    act(() => setVisibility("hidden"));
+    remux.lost = true;
+    remux.position = 0;
+    act(() => setVisibility("visible"));
+
+    await waitFor(() => expect(probes).toHaveLength(2), { timeout: 3000 });
+    expect(logged("rebuild")[0].fields).toMatchObject({ at: 3588 });
+  });
+
   it("au retour : l'absence est notée d'abord, la reconstruction ensuite — au départ, la trace puis la copie exacte", async () => {
     mount();
     await waitFor(() => expect(probes).toHaveLength(1));

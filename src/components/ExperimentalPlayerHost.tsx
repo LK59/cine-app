@@ -39,6 +39,7 @@ import { useViewportResizing } from "@/lib/useViewportResizing";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import { AudioKeepAwake } from "@/components/player/audioKeepAwake";
+import { trackedPosition } from "@/components/player/session/trackedPosition";
 import { isAppleTouchDevice } from "@/lib/iosInstall";
 import { NATIVE_PATH } from "@/lib/webcodecs/pathSelector";
 import { trace, traceKeepAcrossReset, traceRecent } from "@/lib/webcodecs/trace";
@@ -2137,7 +2138,9 @@ export function ExperimentalPlayerHost({
         notePosition: (seconds) => tally.retries.notePosition(seconds),
       });
       const onTime = () => {
-        positionRef.current = element.currentTime;
+        // Un zéro venu de nulle part (décodeur WebKit qui lâche, source neuve pas encore posée) n'efface
+        // pas la position connue : voir `trackedPosition`.
+        positionRef.current = trackedPosition(positionRef.current, element);
         showSubtitleAt(element.currentTime, (at, track) => playback.subtitleAt(at, track), playback.presentationDelay);
         // Retenu toutes les quinze secondes de lecture : ce qui distingue, à la prochaine
         // ouverture, un relais d'une vraie reprise (voir `resumeRewind.ts`).
