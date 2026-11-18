@@ -591,12 +591,16 @@
 
 /* Le champ qui dessine sa propre croix d'effacement doit demander à Chrome de ranger la sienne :
    `type="search"` en pose une, et les deux se superposaient au même endroit. On ne la retire pas
-   partout — là où il n'y a pas de bouton à nous, la croix native est la seule qu'on ait. */
+   partout — là où il n'y a pas de bouton à nous, la croix native est la seule qu'on ait.
+   `appearance: none` suffit à Chromium, pas à WebKit : Safari sur Mac (et WebKit mesuré sous
+   Playwright, 18/11/2026) gardait sa croix ronde à côté de la nôtre — deux croix dans le champ.
+   `display: none` la retire dans les deux moteurs. */
 @utility search-no-native-clear {
   &::-webkit-search-cancel-button,
   &::-webkit-search-decoration {
     -webkit-appearance: none;
     appearance: none;
+    display: none;
   }
 }
 
