@@ -4,7 +4,7 @@ storage local set cine:unsent-stop:00000001 {"savedAt":1792522800000,"fields":{"
 fetch GET /api/player/frame/ep-1
 step monté
 probe {"audioPreferences":null,"audioTrackNumber":null,"fileVersion":null,"startPaused":false,"startSeconds":3290,"streamUrl":"/stream.mkv","videoRangeType":"SDR"}
-log start {"itemId":"ep-1","title":"Épisode 1","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","reason":"remultiplexage → lecteur natif","openedInMs":0,"at":3290,"rebuild":0,"displayHdr":"inconnu","hdrLightCap":"natif","hdrChoice":"auto","wideGamut":"inconnu"}
+log start {"itemId":"ep-1","title":"Épisode 1","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","reason":"remultiplexage → lecteur natif","openedInMs":0,"at":3290,"rebuild":0,"resumeFrom":"appelant","serverResumeS":300,"displayHdr":"inconnu","hdrLightCap":"natif","hdrChoice":"auto","wideGamut":"inconnu"}
 media video play
 fetch GET /api/jellyfin/chapters?itemId=ep-1
 fetch GET /api/jellyfin/trickplay/info?itemId=ep-1

@@ -1,6 +1,6 @@
 fetch GET /api/jellyfin/chapters?itemId=ep-1
 fetch GET /api/jellyfin/trickplay/info?itemId=ep-1
-storage local set cine:unsent-stop:00000001 {"savedAt":1792522800000,"fields":{"itemId":"ep-1","title":"Épisode 1","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":3290,"watched":0,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0,"gaveUpAfterMs":0},"account":null}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522800000,"fields":{"itemId":"ep-1","title":"Épisode 1","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":3290,"watched":0,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0,"gaveUpAfterMs":0,"diag.beatPos":120,"diag.beatAgoS":-1},"account":null}
 step monté
 storage local set cine:player-volume {"volume":1,"muted":false}
 storage local set cine:player-volume {"volume":1,"muted":false}
@@ -76,7 +76,7 @@ dom carte du générique
     button "player.moreOptions"
     input "player.seekLabel" type=range value=3302 valuetext=player.seekValue:{"at":"55:02","total":"1:00:00"}
 storage local set cine:last-watched {"ep-1":1792522816000,"film":1792522800000}
-beacon /api/player/log stop {"diag":{"resumeAt":3290,"resumeFragment":1,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"ep-1","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"next","at":3309,"watched":20,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0,"timeline":"3294,5,0,0,-,L;3299,10,0,0,-,L;3304,15,0,0,-,L;3309,20,0,0,-,L;3309,20,0,0,-,L"}
+beacon /api/player/log stop {"diag":{"resumeAt":3290,"resumeFragment":1,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"ep-1","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"next","at":3309,"watched":20,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0,"diag.beatPos":3290,"diag.beatAgoS":19,"timeline":"3294,5,0,0,-,L;3299,10,0,0,-,L;3304,15,0,0,-,L;3309,20,0,0,-,L;3309,20,0,0,-,L"}
 storage local remove cine:unsent-stop:00000001
 fetch POST /api/jellyfin/playback/stop {"client":"Laterna","itemId":"ep-1","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":33090000000,"isPaused":false,"visible":true}
 playback advance {"itemId":"ep-2","title":"Épisode 2"}
