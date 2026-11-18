@@ -18,12 +18,12 @@ import { isAppleTouchDevice } from "@/lib/iosInstall";
  * l'écran a été écarté par le propriétaire (44 composants calés sur le bas de la fenêtre). On attend
  * Apple ; ce relevé dira quand une version d'iOS l'aura corrigé.
  *
- * Une quatrième, à l'essai depuis le 18/11/2026 : la remise de la page à l'origine (`scrollTo(0, 0)`), trois fois
- * (tout de suite, à 150 et à 600 ms, le temps qu'iOS se pose). Deux applications installées l'ont publiée pour
- * « après une rotation, les touchers ne répondent plus » sous iOS 27 — la page peinte au bon endroit, la zone de
- * toucher calculée sur un cadre décalé (victronenergy/gui-v2 #3280, mclgoerg/mailbroom #81) ; le propriétaire l'a
- * vécu en paysage le même jour (`inner` 0 puis 232, `outer` 430). Le relevé porte l'avant, l'après (700 ms) et
- * `fixed` : on saura si elle sert, sinon elle partira comme les trois autres. Jamais pendant une saisie.
+ * Une quatrième, essayée et retirée le même jour (18/11/2026, 10.59.1 → 10.60.2) : la remise de la page à l'origine
+ * (`scrollTo(0, 0)` à 0, 150 et 600 ms), publiée par deux applications installées pour « plus aucun toucher après
+ * une rotation » sous iOS 27 (victronenergy/gui-v2 #3280, mclgoerg/mailbroom #81). Relevée sur six états coincés :
+ * aucun réparé (`inner` resté à 0) — chez nous la fenêtre ne se décale pas, elle s'annonce nulle (`inner` et vue
+ * visuelle à 0, `outer` juste), dès le 17/11 et notamment à l'ouverture du centre de contrôle ou de
+ * l'enregistrement d'écran. Le relevé garde le zoom de la vue visuelle et le haut du `body` (`vvScale`, `bodyTop`).
  *
  * Sur iPhone, la référence est aussi l'écran : en application installée, `black-translucent` et
  * `viewport-fit=cover`, la page en occupe toute la hauteur. Pas sur iPad, où une fenêtre partagée
@@ -32,9 +32,6 @@ import { isAppleTouchDevice } from "@/lib/iosInstall";
 
 const SETTLE_AFTER_BLUR_MS = 140;
 const SETTLE_AFTER_SHOW_MS = 300;
-/** La remise à l'origine, relancée pendant qu'iOS se pose ; la seconde mesure vient après la dernière. */
-const REPAIR_STEPS_MS = [0, 150, 600] as const;
-const REPAIR_MEASURE_MS = 700;
 /** Le jeu toléré entre deux mesures de la même orientation. */
 const SLACK_PX = 4;
 
@@ -97,10 +94,9 @@ export function watchViewportStuck({ win, shell, playing, fullHeight = () => nul
   const expected = () => Math.max(tallest.get(win.innerWidth) ?? 0, fullHeight() ?? 0);
   const stuck = () => expected() - win.innerHeight > SLACK_PX;
 
-  const relate = (trigger: string, decision: string, before: Record<string, unknown>, extra: Record<string, unknown> = {}) => {
-    if (report) report({ trigger, best: expected(), decision, before, ...extra });
+  const relate = (trigger: string, decision: string, before: Record<string, unknown>) => {
+    if (report) report({ trigger, best: expected(), decision, before });
   };
-  let repairing = false;
 
   let timer: number | undefined;
   let trigger = "";
@@ -113,19 +109,7 @@ export function watchViewportStuck({ win, shell, playing, fullHeight = () => nul
       if (trigger === "retour") relate(trigger, "rien", before);
       return;
     }
-    const decision = editableFocused(doc) ? "champ" : playing() ? "film" : "coincée";
-    // Une saisie en cours : le clavier est légitime, on ne touche à rien.
-    if (decision === "champ" || repairing) {
-      relate(trigger, decision, before);
-      return;
-    }
-    repairing = true;
-    const why = trigger;
-    for (const ms of REPAIR_STEPS_MS) win.setTimeout(() => win.scrollTo(0, 0), ms);
-    win.setTimeout(() => {
-      repairing = false;
-      relate(why, decision, before, { repair: "scrollTo", after: viewportSnapshot(win, shell()), fixed: !stuck() });
-    }, REPAIR_MEASURE_MS);
+    relate(trigger, editableFocused(doc) ? "champ" : playing() ? "film" : "coincée", before);
   };
   const later = (why: string, ms: number) => {
     if (timer !== undefined) win.clearTimeout(timer);

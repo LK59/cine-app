@@ -305,7 +305,7 @@ Silk navigates by an on-screen cursor by default and then sends the page no arro
 In the installed app on iPhone and iPad, it also receives `kind: "hauteur"` lines (`viewportWatch.ts`, since
 2026-11-05): the window, visual viewport, root and shell heights when the window comes back shorter than the
 screen — iOS 26 can leave it at its keyboard height after a keyboard in another app. Three repairs were
-measured useless and removed; the lines say when an iOS release fixes it. A fourth is on trial since 2026-11-18: `scrollTo(0, 0)` three times (0, 150, 600 ms), published by other installed apps for « no touch responds after a rotation » on iOS 27; the line carries `after` and `fixed` — remove it if it never fixes anything.
+measured useless and removed; the lines say when an iOS release fixes it. A fourth (`scrollTo(0, 0)` three times, published by other installed apps for iOS 27) was tried on 2026-11-18 and removed the same day: six stuck states, none repaired — here the window reports itself 0 high (`inner` and the visual viewport at 0, `outer` right), notably when Control Center or screen recording opens. The lines keep `vvScale` and `bodyTop`.
 On iPhone and iPad it also receives `kind: "retour"` lines (`returnDiag.ts`, since 2026-11-07): after a
 return to the foreground from at least 2 s hidden, three seconds of frames (`firstFrameMs`, `maxGapMs` and
 when it ended, `janks` over 50 ms, `longJanks` over 200 ms) and what the return triggered, with its time
