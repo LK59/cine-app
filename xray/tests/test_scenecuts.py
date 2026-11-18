@@ -364,3 +364,41 @@ def test_mesure_des_resultats_d_avant(client, monkeypatch):
     assert doc["v"] == sc.BOUNDS_VERSION and [x["t"] for x in doc["bounds"]] == [0.0, 40.0]
     chapters = json.loads(db.one("SELECT chapters_json FROM items WHERE item_id=?", (ITEM,))["chapters_json"])
     assert "error" in chapters
+
+
+def _shot(start, end, dark):
+    """Un plan gardé : la moyenne de ses histogrammes, `dark` des pixels sous 24 de luminance."""
+    hy = np.zeros(32, np.float32)
+    hy[2], hy[10] = dark, 1.0 - dark
+    u = np.zeros(16, np.float32); u[8] = 1.0
+    return {"start": start, "end": end, "hist": np.concatenate([hy, u, u]).astype(np.float32).tobytes()}
+
+
+def test_plans_noirs():
+    """Version 3 : seuls les plans presque tout noirs **et** courts sont un fondu (au-delà, une scène de nuit)."""
+    rows = [_shot(0, 98, 0.1), _shot(98, 100, 0.99), _shot(100, 101, 0.5), _shot(101, 108, 0.99), _shot(108, 109, 0.96)]
+    assert sc.black_shots(rows) == [(98.0, 100.0)]
+
+
+def test_fondu_au_noir():
+    """Un noir à 2 s près rend la coupe sûre là où les signaux disaient « même lieu », et l'on entre après le noir ;
+    une parole qui le traverse, personne qui parle ensuite ou une réplique enchaînée la refusent encore."""
+    scenes = [_scene(0, 100), _scene(100, 130), _scene(130, 300), _scene(300, 500), _scene(500, 700)]
+    same = {"sim": 0.95, "fb": 3, "fa": 3, "fj": 1.0}
+    bounds = [{"t": 0.0, "first": True}] + [{"t": float(t), **same} for t in (100, 130, 300, 500)]
+    blacks = [(99.0, 101.0), (128.0, 129.0), (297.5, 298.5), (499.0, 500.5)]
+    runs = sc.speech_runs([(102.0, 110.0), (135.0, 140.0), (295.0, 302.0), (490.0, 500.0), (501.0, 510.0)])
+    out = sc.decide(scenes, bounds, runs, [], blacks)
+    got = [(x["entry"], x["cut"]["ok"], x["cut"]["why"]) for x in out]
+    assert got == [
+        (0.0, True, "début"),
+        (101.0, True, "fondu"),      # la scène d'après dure 30 s : le noir suffit (pas de `court`)
+        (130.0, True, "fondu"),      # le noir finit la scène d'avant : on entre à la coupe
+        (300.0, False, "parole"),    # une phrase commencée 5 s avant traverse le noir
+        (500.5, False, "enchaîné"),  # la réplique reprend 0,5 s après le noir
+    ]
+    # Sans noir, les mêmes frontières restent « même lieu » ; un noir à plus de 2 s ne dit rien.
+    assert [x["cut"]["why"] for x in sc.decide(scenes, bounds, runs, [])][1:3] == ["même-lieu", "même-lieu"]
+    assert sc.decide(scenes, bounds, runs, [], [(95.0, 97.5)])[1]["cut"]["why"] == "même-lieu"
+    # Personne ne parle dans la minute après le noir : `muet` (un générique, un plan d'ambiance).
+    assert sc.decide(scenes, bounds, sc.speech_runs([(170.0, 180.0)]), [], blacks)[1]["cut"]["why"] == "muet"

@@ -510,7 +510,9 @@ d'écart) et les chapitres (`items.chapters_json`) :
   commencé **3 s au plus** avant elle y ramène le point d'entrée — revenir au milieu d'une phrase n'est pas
   revenir au début d'une scène ;
 - **`cut: {ok, why}`**, dans l'ordre : `début` ; `après-saut` ; `chapitre` (un chapitre d'auteur à 2 s près) ;
-  refus `parole` (la phrase a commencé plus de 3 s avant la coupe) ; refus `montage` (deux scènes de moins de
+  refus `parole` (la phrase a commencé plus de 3 s avant la coupe) ; `fondu` (version 3 : un plan d'au plus 5 s
+  dont 97 % des pixels ont une luminance sous 24, lu sur les histogrammes gardés des plans, à 2 s près de la coupe
+  — le point d'entrée passe après le noir) ; refus `montage` (deux scènes de moins de
   25 s, sans visage de part et d'autre ni parole qui traverse) ; `deux-signaux` (les couleurs changent,
   `sim` ≤ 0,82, **et** les personnes aussi, `fj` ≤ 0,15 avec deux groupes au moins de chaque côté) ; sinon refus
   `même-lieu`. Puis **îlot** : une scène acceptée aux deux signaux, de moins de 60 s, entre deux frontières
@@ -518,7 +520,7 @@ d'écart) et les chapitres (`items.chapters_json`) :
   `deux-signaux` est refusée si la scène d'avant ou d'après dure moins de 40 s (`court`), si personne ne parle
   dans les 60 s qui suivent le point d'entrée (`muet`), ou si le silence avant et après le point d'entrée fait
   moins de 1,5 s en tout (`enchaîné` : la conversation continue par-dessus le changement de plan). Les chapitres
-  d'auteur, tous justes à la mesure, n'y passent pas.
+  d'auteur, tous justes à la mesure, n'y passent pas ; un `fondu` passe par `muet` et `enchaîné`, pas par `court`.
 - **`pauses`** (version 2) : les silences d'au moins 5 s qui suivent une prise de parole — jusqu'à la suivante,
   ou jusqu'à la fin de la dernière scène —, `[début, fin]`, rangés dans la scène où ils **commencent** (la fin
   peut dépasser la scène). Laterna ne propose pas de revenir au début d'une scène par-dessus l'un d'eux.
@@ -535,7 +537,9 @@ souvent, mais ne ramène pas au milieu d'une scène. Une seconde mesure le même
 position de reprise toutes les 10 s, chaque cible jugée à l'œil), a donné la version 2 : la version 1 laissait
 passer des allers-retours entre deux décors d'une même scène et des plans d'ambiance ; avec ses refus et les règles
 de Laterna resserrées (DECISIONS §143), le bouton paraît à 3 % des positions, et chaque fois au bon endroit. Les
-seuils sont des constantes nommées de `scenecuts.py`.
+seuils sont des constantes nommées de `scenecuts.py`. La version 3 (18/11/2026) ajoute le fondu au noir : 7,6 % des
+frontières de 120 titres en ont un, et le service refusait les deux tiers comme « même lieu » ; au banc, le bouton
+passe de 4,7 à 6,7 % des positions, et dix des onze nouvelles cibles regardées sont justes (DECISIONS §143).
 
 **Les résultats d'avant** : un élément fini sans mesure (ou d'une autre `BOUNDS_VERSION`), ou dont les chapitres
 n'ont jamais été lus, est repris en tâche de fond par la voie A (`backfill_some`, après tous les autres travaux
@@ -543,7 +547,7 @@ d'appoint, jamais devant un ordre `normal` ou `high`, lots de 10 s) : regroupeme
 depuis la base, comme le renommage, mais **seules les mesures sont écrites** — scènes, personnes et version
 restent celles du résultat ; une frontière regroupée autrement qu'à l'époque reste sans verdict. Les mesures
 portent leur version, `BOUNDS_VERSION` (1), qui ne monte que si ce qui est mesuré change ; les règles, appliquées
-à chaque lecture, portent la leur, `CUTS_VERSION` (2), servie comme `cutsVersion` — une règle nouvelle vaut
+à chaque lecture, portent la leur, `CUTS_VERSION` (3), servie comme `cutsVersion` — une règle nouvelle vaut
 aussitôt pour tous les résultats mesurés, sans rattrapage. `RESULT_VERSION` ne bouge pas.
 
 ---

@@ -6,6 +6,14 @@ chaque rapport de décision (`service.version`) et dans la ligne de démarrage d
 Les versions des résultats (`RESULT_VERSION`, `VOICE_VERSION`, `ASD_VERSION`) suivent leur propre règle
 (`app/config.py`) : elles ne bougent que quand un résultat ancien devient incomparable.
 
+## 1.7.0
+
+- **Fondu au noir** (`cutsVersion` 3) : un plan presque tout noir (97 % des pixels sous 24 de luminance), de 5 s
+  au plus, à 2 s près d'une frontière, en fait un début de scène sûr (`fondu`), le point d'entrée après le noir —
+  sauf phrase qui le traverse (`parole`), personne qui parle dans la minute (`muet`) ou réplique enchaînée
+  (`enchaîné`). Lu sur les histogrammes déjà gardés des plans : rien n'est réanalysé ni rattrapé. Banc sur ~240
+  titres : le bouton de Laterna passe de 4,7 à 6,7 % des positions de reprise. Voir `docs/PIPELINE.md` §12.
+
 ## 1.6.1
 
 - Dépendances : fastapi 0.163.1, numpy 2.5.5, onnxruntime 1.32.0, annotated-doc 0.0.6 ; pour la

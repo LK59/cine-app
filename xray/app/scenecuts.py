@@ -24,6 +24,9 @@ Ce qui s'y ajoute à la lecture (`annotate`, servi par `/items/{id}/scenes`) :
 - un **chapitre d'auteur** à 2 s près rend la coupe sûre (`chapitre`) ; des chapitres posés à intervalles
   réguliers (« Chapter 1 », « Chapter 2 »… toutes les 5 min) sont automatiques et ignorés, et des marqueurs
   seuls (intro, générique) ne disent rien des scènes ;
+- un **fondu au noir** (version 3) : un plan presque tout noir, court, à 2 s près de la coupe, la rend sûre
+  (`fondu`) — sauf si une parole la traverse (`parole`), ou si personne ne parle dans la minute qui suit
+  (`muet`), ou si la parole n'y laisse pas 1,5 s de silence (`enchaîné`) : un générique, une voix off ;
 - sinon, **deux signaux** (choix du propriétaire, 10/11/2026) : les couleurs changent (`sim` ≤ 0,82) *et* les
   personnes changent (`fj` ≤ 0,15 avec deux groupes au moins de chaque côté) ; sinon `même-lieu`. Deux scènes
   de moins de 25 s sans visages ni parole sont un `montage`, et une scène sûre de moins d'une minute entre deux
@@ -55,6 +58,8 @@ import statistics
 import subprocess
 import time
 
+import numpy as np
+
 from .config import settings
 
 log = logging.getLogger("xray.scenecuts")
@@ -66,7 +71,8 @@ log = logging.getLogger("xray.scenecuts")
 # `BOUNDS_VERSION`, et ne sont refaites que quand ce qui est *mesuré* change.
 #   1 — (10/11/2026) première version : chapitres, parole, deux signaux, montage, îlot.
 #   2 — (10/11/2026) les deux signaux resserrés (`court`, `muet`, `enchaîné`) et les silences (`pauses`).
-CUTS_VERSION = 2
+#   3 — (18/11/2026) le fondu au noir (`fondu`), lu sur les plans gardés (`shots.hist`).
+CUTS_VERSION = 3
 # Version des mesures gardées (`results.bounds_json`, champ `v`) : à monter seulement quand `boundary_features`
 # change. Une mesure d'une autre version est refaite en tâche de fond (`backfill_some`), sans rien décoder ; les
 # règles, elles, s'appliquent à la lecture et suivent `CUTS_VERSION` d'elles-mêmes.
@@ -104,6 +110,15 @@ CUT_QUIET_MIN_S = 1.5
 # Les silences d'au moins tant, après une prise de parole, sont servis par scène (`pauses`) : Laterna ne
 # propose pas de revenir par-dessus l'un d'eux (la scène a déjà changé de temps, sinon de lieu).
 PAUSE_MIN_S = 5.0
+# Fondu au noir (version 3, 18/11/2026) : un plan dont au moins tant des pixels ont une luminance sous 24 (les
+# trois premiers des 32 paliers Y de `shots.signature` ; le noir vidéo est à 16)…
+FADE_DARK_SHARE = 0.97
+# … qui dure au plus ceci (au-delà, c'est une scène de nuit, pas une transition)…
+FADE_MAX_S = 5.0
+# … et touche la coupe à tant près (le noir finit la scène d'avant ou ouvre la suivante).
+FADE_ALIGN_S = 2.0
+# Mesuré le 18/11/2026 sur 120 titres : 7,6 % des frontières ont un tel plan, le noir dure presque toujours moins
+# de 5 s, et le service en refusait les deux tiers (`même-lieu`) — la couleur du noir ne dit rien du lieu.
 # Chapitres automatiques : intervalles égaux à tant près (ou à 2 % de leur médiane).
 EVEN_TOLERANCE_S = 2.0
 EVEN_TOLERANCE_SHARE = 0.02
@@ -216,6 +231,23 @@ def pauses_by_scene(runs: list[tuple[float, float]], scenes: list[dict]) -> list
     return out
 
 
+# ---- le noir ----------------------------------------------------------------------------------------
+
+
+def black_shots(rows) -> list[tuple[float, float]]:
+    """Les plans presque tout noirs et courts parmi `rows` (`start`, `end`, `hist` : la moyenne des histogrammes
+    du plan, 64 `float32`, la luminance d'abord)."""
+    out = []
+    for r in rows:
+        start, end = float(r["start"]), float(r["end"])
+        if end - start > FADE_MAX_S:
+            continue
+        hist = np.frombuffer(r["hist"], dtype=np.float32)
+        if hist.size >= 3 and float(hist[:3].sum()) >= FADE_DARK_SHARE:
+            out.append((start, end))
+    return out
+
+
 # ---- les chapitres ---------------------------------------------------------------------------------
 
 _GENERIC_TITLE = re.compile(
@@ -307,7 +339,7 @@ def chapters_of(doc: dict | None) -> tuple[str, list[float]]:
 
 
 def decide(scenes: list[dict], bounds: list[dict], runs: list[tuple[float, float]],
-           chapter_starts: list[float]) -> list[dict | None]:
+           chapter_starts: list[float], blacks: list[tuple[float, float]] = ()) -> list[dict | None]:
     """Pour chaque scène de `scenes` (le résultat servi, dans l'ordre), `{"entry", "cut": {"ok", "why"}, "pauses"}`
     — ou `None` si sa frontière n'a pas de mesure (un résultat d'avant, regroupé autrement)."""
     by_t = {round(b["t"], 3): b for b in bounds}
@@ -328,6 +360,10 @@ def decide(scenes: list[dict], bounds: list[dict], runs: list[tuple[float, float
             cut = (True, "chapitre")
         elif cross and t - cross[0] > SPEECH_SNAP_S:
             cut = (False, "parole")
+        elif fade := next(((a, b) for a, b in blacks if a - FADE_ALIGN_S <= t <= b + FADE_ALIGN_S), None):
+            cut = (True, "fondu")
+            # On revient sur la première image après le noir, pas sur la dernière seconde de la scène d'avant.
+            entry = max(entry, round(fade[1], 3))
         else:
             prev_len = float(scenes[i - 1]["end"]) - float(scenes[i - 1]["start"]) if i > 0 else 0.0
             cur_len = float(sc["end"]) - float(sc["start"])
@@ -353,13 +389,15 @@ def decide(scenes: list[dict], bounds: list[dict], runs: list[tuple[float, float
     # Les deux signaux resserrés (version 2), **après** les îlots : l'îlot se juge sur les verdicts de la
     # version 1, comme mesuré — un refus de plus ici ne fait pas d'une voisine un îlot. Les chapitres d'auteur,
     # tous justes à la mesure, n'y passent pas.
+    # Le fondu passe par `muet` et `enchaîné`, pas par `court` : le noir dit à lui seul qu'une scène finit, si
+    # brève soit-elle, mais pas qu'une scène parlée commence (générique, voix off par-dessus le noir).
     for i, x in enumerate(out):
-        if x is None or i == 0 or x["cut"]["why"] != "deux-signaux":
+        if x is None or i == 0 or x["cut"]["why"] not in ("deux-signaux", "fondu"):
             continue
         prev_len = float(scenes[i]["start"]) - float(scenes[i - 1]["start"])
         cur_len = float(scenes[i]["end"]) - float(scenes[i]["start"])
         quiet_before, quiet_after = speech_gaps(runs, x["entry"])
-        if prev_len < SHORT_SCENE_S or cur_len < SHORT_SCENE_S:
+        if x["cut"]["why"] == "deux-signaux" and (prev_len < SHORT_SCENE_S or cur_len < SHORT_SCENE_S):
             x["cut"] = {"ok": False, "why": "court"}
         elif quiet_after > FIRST_SPEECH_MAX_S:
             x["cut"] = {"ok": False, "why": "muet"}
@@ -399,7 +437,8 @@ def annotate(db, res) -> dict | None:
         regions = [(r["start"], r["end"]) for r in
                    db.q("SELECT start, end FROM voice_regions WHERE item_id=? ORDER BY start", (res["item_id"],))]
         runs = speech_runs(regions)
-        extras = decide(scenes, doc.get("bounds") or [], runs, starts)
+        blacks = black_shots(db.q("SELECT start, end, hist FROM shots WHERE item_id=? ORDER BY start", (res["item_id"],)))
+        extras = decide(scenes, doc.get("bounds") or [], runs, starts, blacks)
         aligned = sum(1 for x in extras if x is not None and x["cut"]["why"] == "chapitre")
         return {"scenes": extras, "speechShare": speech_share(runs, spans), "cutsVersion": CUTS_VERSION,
                 "chapters": {"kind": kind, "count": count, "aligned": aligned}}
