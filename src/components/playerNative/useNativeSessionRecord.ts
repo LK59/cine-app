@@ -31,6 +31,7 @@ import { recordsResume } from "@/components/player/session/habitWatch";
 import { timelinePosition, useSessionTimeline } from "@/components/player/session/useSessionTimeline";
 import { gaveUpFields } from "@/components/player/session/gaveUp";
 import { endSceneRestart, sceneRestartLogFields } from "@/lib/sceneRestartSession";
+import { beatStopFields } from "@/lib/progressBeat";
 import { endXrayUsage, xrayLogFields } from "@/lib/xrayUsage";
 import { endReplayUsage, replayLogFields } from "@/lib/replaySubtitles";
 import { endOnScreenSession } from "@/lib/onScreenSession";
@@ -145,6 +146,8 @@ export function useNativeSessionRecord({
         ...slowFields(),
         // « Revenir au début de la scène » (§143) : ce qui a été décidé — rien sans les acteurs à l'écran.
         ...sceneRestartLogFields(itemId),
+        // Le dernier relevé de position parti vers Jellyfin (`progressBeat.ts`) : à comparer à `at`.
+        ...beatStopFields(itemId, now),
         // L'usage des acteurs à l'écran (`xrayUsage.ts`) — rien sans l'option proposée.
         ...xrayLogFields(itemId),
         // Les sous-titres d'un passage rejoué (§150) — rien tant qu'aucune aide n'a paru.

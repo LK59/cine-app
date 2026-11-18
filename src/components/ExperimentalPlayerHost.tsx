@@ -1926,6 +1926,16 @@ export function ExperimentalPlayerHost({
         openedInMs: Date.now() - attemptStartedAt,
         at: startSeconds,
         rebuild: rebuildCount,
+        // À la première ouverture : d'où vient la position, et ce que disait le serveur quand c'est l'appelant
+        // qui l'a fournie — une fiche relue avant que Jellyfin ait pris l'arrêt donne une reprise périmée.
+        ...(rebuildCount === 0
+          ? {
+              resumeFrom: openingFrom,
+              ...(openingFrom === "appelant" && typeof playbackState?.resumeSeconds === "number"
+                ? { serverResumeS: Math.round(playbackState.resumeSeconds * 10) / 10 }
+                : {}),
+            }
+          : {}),
         // L'écran tel que le navigateur le voit, et le plafond de lumière HDR qui en découle —
         // voir hdrDisplay.ts. De quoi relire au journal pourquoi un film HDR a le rendu qu'il a.
         displayHdr: displayIsHdr() ?? "inconnu",
@@ -1991,6 +2001,8 @@ export function ExperimentalPlayerHost({
     // it was told to start. Without that last part, a rebuild nobody asked for — and there was
     // one, every time the player was minimised — sent the film back to where it began.
     let startSeconds = lifecycle.openingSeconds(positionRef.current, session.resumeAt, playbackState?.resumeSeconds);
+    // D'où vient cette position — pour la ligne `start` de la première ouverture (`openingSource`).
+    const openingFrom = lifecycle.openingSource(positionKnownRef.current, session.resumeAt, playbackState?.resumeSeconds);
     // Reprendre quelques secondes avant, à la première ouverture seulement — jamais pour une
     // reconstruction, qui rouvre là où l'image vient de s'arrêter. Voir `resumeRewind.ts`.
     if (!openingDecidedRef.current) {

@@ -18,6 +18,7 @@ import { sleepTimerLogFields, sleepTimerStore } from "@/lib/sleepTimer";
 import type { SessionTally, WatchedClock } from "@/lib/playerSessionTally";
 import { gaveUpFields } from "@/components/player/session/gaveUp";
 import { endSceneRestart, sceneRestartLogFields } from "@/lib/sceneRestartSession";
+import { beatStopFields } from "@/lib/progressBeat";
 import { endXrayUsage, xrayLogFields } from "@/lib/xrayUsage";
 import { endReplayUsage, replayLogFields } from "@/lib/replaySubtitles";
 import { endOnScreenSession } from "@/lib/onScreenSession";
@@ -110,6 +111,8 @@ export function useServerSessionRecord({
       ...(lighterClearedRef.current ? { lighterCleared: true } : {}),
       // « Revenir au début de la scène » (§143) : ce qui a été décidé — rien sans les acteurs à l'écran.
       ...sceneRestartLogFields(logContext.current.itemId),
+      // Le dernier relevé de position parti vers Jellyfin (`progressBeat.ts`) : à comparer à `at`.
+      ...beatStopFields(logContext.current.itemId),
       ...xrayLogFields(logContext.current.itemId),
       ...replayLogFields(logContext.current.itemId) };
     },

@@ -35,3 +35,33 @@ export function forgetProgressBeat(): void {
 export function progressBeatFresh(now = Date.now()): boolean {
   return lastBeatAt > 0 && now - lastBeatAt < PROGRESS_BEAT_FRESH_MS;
 }
+
+/**
+ * Le dernier relevé de position envoyé à Jellyfin pour un titre, et s'il est passé (18/11/2026).
+ *
+ * *Drive*, ce jour-là : fermé à 96 % (l'arrêt est arrivé, Jellyfin l'a noté), rouvert dix secondes plus tard depuis
+ * la fiche à 30 min de la fin — la position que Jellyfin avait juste avant l'arrêt. Tous les relevés avaient reçu
+ * « ok », sans qu'on puisse dire quelle position ils portaient. Le bilan `stop` la porte désormais
+ * (`diag.beatPos`, `diag.beatAgoS`, `diag.beatOk`) : un écart avec `at` dit un lecteur qui relève une position
+ * figée.
+ */
+const lastBeats = new Map<string, { pos: number; at: number; ok: boolean }>();
+const LAST_BEATS_MAX = 20;
+
+export function noteBeatPosition(itemId: string, seconds: number, ok: boolean, now = Date.now()): void {
+  if (!Number.isFinite(seconds)) return;
+  lastBeats.delete(itemId);
+  lastBeats.set(itemId, { pos: seconds, at: now, ok });
+  if (lastBeats.size > LAST_BEATS_MAX) lastBeats.delete(lastBeats.keys().next().value!);
+}
+
+/** Les champs du bilan : rien si aucun relevé n'est parti pour ce titre. */
+export function beatStopFields(itemId: string, now = Date.now()): Record<string, number | boolean> {
+  const beat = lastBeats.get(itemId);
+  if (!beat) return {};
+  return {
+    "diag.beatPos": Math.round(beat.pos * 10) / 10,
+    "diag.beatAgoS": Math.round((now - beat.at) / 1000),
+    ...(beat.ok ? {} : { "diag.beatOk": false }),
+  };
+}

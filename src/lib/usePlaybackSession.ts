@@ -3,7 +3,7 @@ import { PLAYBACK_CLIENTS, type PlaybackClient } from "@/lib/playbackClients";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { noteMaintenanceState } from "@/lib/useMaintenance";
 import { clearUnsentPosition, flushUnsentPositions, saveUnsentPosition, unsentPositionsPending } from "@/lib/unsentPosition";
-import { forgetProgressBeat, noteProgressBeat } from "@/lib/progressBeat";
+import { forgetProgressBeat, noteBeatPosition, noteProgressBeat } from "@/lib/progressBeat";
 
 interface PlaybackSessionInfo {
   itemId: string;
@@ -89,6 +89,8 @@ function report(
       }
       // Le battement rapporte l'état d'exploitation et tient lieu de présence : tant qu'il passe, le
       // sondage de maintenance et le signal de présence se taisent pendant le film (`progressBeat.ts`).
+      // La position que porte ce relevé, et s'il est passé — lue par le bilan d'arrêt (`beatStopFields`).
+      if (path === "progress") noteBeatPosition(info.itemId, positionTicks / TICKS_PER_SECOND, res.ok);
       if (path === "progress" && res.ok) {
         noteProgressBeat();
         noteMaintenanceState(((await res.json().catch(() => null)) as { maintenance?: unknown } | null)?.maintenance);
@@ -96,7 +98,10 @@ function report(
       if (path === "stop") forgetProgressBeat();
     })
     // Pas de réponse : la coupure. La position reste sur l'appareil jusqu'au retour du réseau.
-    .catch(() => saveUnsentPosition(info.itemId, positionTicks / TICKS_PER_SECOND));
+    .catch(() => {
+      if (path === "progress") noteBeatPosition(info.itemId, positionTicks / TICKS_PER_SECOND, false);
+      saveUnsentPosition(info.itemId, positionTicks / TICKS_PER_SECOND);
+    });
 }
 
 /**

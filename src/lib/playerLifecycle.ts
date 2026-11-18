@@ -235,6 +235,19 @@ export class PlayerLifecycle {
     return this.rebuildAt ?? (position > 0 ? position : sessionResumeAt ?? serverResume ?? 0);
   }
 
+  /**
+   * D'où vient la position d'ouverture choisie par `openingSeconds` (18/11/2026, ligne `start`, `resumeFrom`) :
+   * `reconstruction`, `lecture` (la position suivie), `appelant` (la fiche ou le bouton qui a lancé, `resumeAt`),
+   * `serveur` (`playback-state`), `début`. Une reprise fausse dit ainsi qui l'a fournie.
+   */
+  openingSource(positionKnown: boolean, sessionResumeAt: number | null | undefined, serverResume: number | null | undefined): string {
+    if (this.rebuildAt !== null) return "reconstruction";
+    if (positionKnown) return "lecture";
+    if (sessionResumeAt !== null && sessionResumeAt !== undefined) return "appelant";
+    if (serverResume !== null && serverResume !== undefined) return "serveur";
+    return "début";
+  }
+
   /** Le prochain pipeline reste en pause — ou non : un changement de piste sur un film qui joue. */
   setKeepPaused(paused: boolean): void {
     this.keepPaused = paused;
