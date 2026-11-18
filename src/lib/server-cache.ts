@@ -232,7 +232,24 @@ export async function withCacheSafe<T>(
 // Chaque entrée expire à son heure — voir `spreadTtl`.
 export { spreadTtl };
 
-export async function withPersistentCache<T>(key: string, requestedTtlMs: number, fn: () => Promise<T>): Promise<T> {
+/** Combien de temps une valeur expirée, servie faute de mieux, reste en mémoire avant qu'on réessaie l'amont. */
+const STALE_RETRY_MS = 5 * 60_000;
+
+/**
+ * `serveStale` : une valeur gardée sur disque mais expirée est rendue **tout de suite**, et recalculée
+ * derrière (chasse de nuit du 18/11/2026). Sans lui, l'appelant attend l'amont — ce qui convient à une
+ * fiche, pas au catalogue : il attend le visuel de chacun de ses mille titres (`getTitleArt`), et environ
+ * huit expirent chaque heure (mesuré : 230 en 24 h sur 1 306). La première ouverture après une expiration
+ * attendait donc TMDB pour ces titres — jusqu'à son délai de 8 s, douze à la fois, pendant une panne de
+ * TMDB — alors que la valeur d'hier était là. La valeur rendue reste en mémoire cinq minutes, le temps que
+ * le recalcul aboutisse ; s'il échoue, le suivant réessaie, comme le repli sur erreur ci-dessous.
+ */
+export async function withPersistentCache<T>(
+  key: string,
+  requestedTtlMs: number,
+  fn: () => Promise<T>,
+  options: { serveStale?: boolean } = {}
+): Promise<T> {
   const ttlMs = spreadTtl(key, requestedTtlMs);
   const memHit = store.get(key) as Entry<T> | undefined;
   if (memHit && Date.now() < memHit.exp) {
@@ -251,6 +268,20 @@ export async function withPersistentCache<T>(key: string, requestedTtlMs: number
       remember(store, key, { v, exp: disk.fetchedAt + ttlMs }, STORE_MAX);
       return v;
     }
+    if (disk && options.serveStale) {
+      const stale = disk.value as T;
+      remember(store, key, { v: stale, exp: Date.now() + STALE_RETRY_MS }, STORE_MAX);
+      void fn()
+        .then((fresh) => {
+          if (generationOf(key) !== gen) return;
+          remember(store, key, { v: fresh, exp: Date.now() + ttlMs }, STORE_MAX);
+          kvCacheDb.set(key, fresh, Date.now());
+        })
+        .catch(() => {
+          // La valeur d'avant reste servie ; son expiration en mémoire relance un essai.
+        });
+      return stale;
+    }
     let v: T;
     try {
       v = await fn();
@@ -265,7 +296,7 @@ export async function withPersistentCache<T>(key: string, requestedTtlMs: number
        */
       if (disk) {
         const stale = disk.value as T;
-        if (generationOf(key) === gen) remember(store, key, { v: stale, exp: Date.now() + 5 * 60_000 }, STORE_MAX);
+        if (generationOf(key) === gen) remember(store, key, { v: stale, exp: Date.now() + STALE_RETRY_MS }, STORE_MAX);
         return stale;
       }
       throw err;

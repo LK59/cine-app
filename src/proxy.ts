@@ -558,10 +558,17 @@ export async function proxy(req: NextRequest) {
     return gated;
   }
 
+  // `HEAD` est une lecture (chasse de nuit du 18/11/2026) : Next le sert par le `GET` de la route,
+  // sans corps. Compté comme une écriture, il répondait 403 à tout compte ordinaire — et c'est la
+  // première question que `HttpByteSource.open` pose au flux quand la taille du fichier n'est pas
+  // connue d'avance : un aller-retour perdu et un 403 de plus pour le pare-feu, à chaque ouverture,
+  // pour les comptes ordinaires seulement (les liens de partage l'avaient déjà, `shareGate`). Les
+  // lectures réservées (`isAdminOnlyRead`, juste dessous) le restent en `HEAD` comme en `GET`.
   if (
     session.role !== "admin" &&
     pathname.startsWith("/api/") &&
     req.method !== "GET" &&
+    req.method !== "HEAD" &&
     !isAllowedForEveryone(req.method, pathname)
   ) {
     return NextResponse.json({ error: "Action réservée à l'administrateur" }, { status: 403 });

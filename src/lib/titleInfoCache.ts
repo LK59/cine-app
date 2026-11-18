@@ -72,3 +72,20 @@ export async function hiddenFromCaller(req: NextRequest, key: string): Promise<b
   if (!session || session.role === "admin") return false;
   return (await hiddenTmdbKeysFor(session.jfId)).has(key);
 }
+
+/**
+ * La personne qui demande est-elle l'administrateur — la seule à qui la description d'une fiche
+ * porte ce que la gestion affiche (chasse de nuit du 18/11/2026) ?
+ *
+ * Les mêmes routes `/info` servent la fiche du cinéma et la page de gestion d'un titre. La seconde
+ * lit les sous-titres de Bazarr — pour une série, chaque épisode avec **son chemin sur le disque** et
+ * le **nom de sa sortie** (`sceneName`) — et les téléchargements en cours (nom du torrent, indexeur) ;
+ * le cinéma n'en lit rien (`tmdb`, `trailerKey`, `imdbId`). Tout compte les recevait pourtant, alors
+ * que la règle est qu'un compte ordinaire n'accède à aucune donnée de la gestion (`ADMIN_ONLY_READS`,
+ * 15/10/2026) — et les attendait : 96 Ko et 360 à 410 ms pour une série de 108 épisodes, contre 2 Ko
+ * utiles, la fiche affichant son synopsis d'autant plus tard.
+ */
+export async function callerManages(req: NextRequest): Promise<boolean> {
+  const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
+  return session?.role === "admin";
+}

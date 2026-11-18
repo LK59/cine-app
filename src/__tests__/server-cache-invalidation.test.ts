@@ -77,3 +77,39 @@ describe("invalidation pendant une requête en vol", () => {
     expect(await withPersistentCache("p:a", 60_000, async () => "jamais appelé")).toBe("neuf");
   });
 });
+
+// 18/11/2026 (chasse de nuit) : le catalogue attend le visuel de chacun de ses titres (`getTitleArt`), et
+// une entrée expirée sur disque faisait attendre TMDB — jusqu'à son délai de 8 s pendant une panne — alors
+// que la valeur d'hier était là. `serveStale` la rend tout de suite et recalcule derrière.
+describe("withPersistentCache — serveStale", () => {
+  it("rend la valeur expirée sans attendre l'amont, puis garde la fraîche", async () => {
+    disk.set("s:a", { value: "hier", fetchedAt: Date.now() - 30 * 24 * 3600_000 });
+    const upstream = deferred<string>();
+    let calls = 0;
+    const served = await withPersistentCache("s:a", 60_000, () => {
+      calls += 1;
+      return upstream.promise;
+    }, { serveStale: true });
+    expect(served).toBe("hier");
+    expect(calls).toBe(1);
+    // Pendant le recalcul : la même valeur, sans second appel.
+    expect(await withPersistentCache("s:a", 60_000, async () => "jamais appelé", { serveStale: true })).toBe("hier");
+    upstream.resolve("aujourd'hui");
+    await upstream.promise;
+    await Promise.resolve();
+    expect(disk.get("s:a")?.value).toBe("aujourd'hui");
+    expect(await withPersistentCache("s:a", 60_000, async () => "jamais appelé", { serveStale: true })).toBe("aujourd'hui");
+  });
+
+  it("sans l'option, l'appelant attend toujours l'amont", async () => {
+    disk.set("s:b", { value: "hier", fetchedAt: Date.now() - 30 * 24 * 3600_000 });
+    expect(await withPersistentCache("s:b", 60_000, async () => "frais")).toBe("frais");
+  });
+
+  it("un recalcul en échec laisse la valeur d'avant", async () => {
+    disk.set("s:c", { value: "hier", fetchedAt: Date.now() - 30 * 24 * 3600_000 });
+    expect(await withPersistentCache("s:c", 60_000, () => Promise.reject(new Error("TMDB en panne")), { serveStale: true })).toBe("hier");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(disk.get("s:c")?.value).toBe("hier");
+  });
+});

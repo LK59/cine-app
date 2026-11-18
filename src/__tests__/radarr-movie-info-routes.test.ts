@@ -20,6 +20,10 @@ vi.mock("@/lib/clients/tmdb", async (importOriginal) => ({
   TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p",
 }));
 vi.mock("@/lib/i18n", () => ({ getTmdbLocale: () => "fr-FR", localeOf: () => "fr" }));
+// Qui demande : l'administrateur par défaut (la page de gestion lit les mêmes routes) ; un compte
+// ordinaire ne reçoit pas ce que seule la gestion affiche — voir `callerManages`.
+const mockSession = vi.fn(async (): Promise<{ role: string } | null> => ({ role: "admin" }));
+vi.mock("@/lib/session", () => ({ verifySessionFull: () => mockSession() }));
 const mockCachedMovies = vi.fn();
 vi.mock("@/lib/server-cache", () => ({
   cachedMovies: (...args: unknown[]) => mockCachedMovies(...args),
@@ -35,6 +39,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockSession.mockImplementation(async () => ({ role: "admin" }));
   mockOmdb.isEnabled.mockReturnValue(false);
   mockTmdb.isEnabled.mockReturnValue(true);
   mockTmdb.getMovie.mockResolvedValue({ overview: "o", genres: [], credits: { cast: [] } });
@@ -46,14 +51,32 @@ beforeEach(() => {
 
 describe("GET /api/radarr/movies/[id]/info", () => {
   it("returns 404 when the movie doesn't exist in Radarr", async () => {
-    mockRadarr.getMovie.mockRejectedValue(new Error("not found"));
+    mockCachedMovies.mockResolvedValue([{ id: 2, tmdbId: 7 }]);
     const { GET } = await import("@/app/api/radarr/movies/[id]/info/route");
     const res = await GET(fakeReq(), params("1"));
     expect(res.status).toBe(404);
   });
 
+  // 18/11/2026 : la fiche demandait `/movie/{id}` à Radarr à chaque ouverture et à chaque survol, et un
+  // Radarr injoignable répondait 404 « Film introuvable » — un refus distinct par titre survolé, ce que
+  // le pare-feu compte pour bannir. Le film vient de la liste gardée au chaud ; une panne se nomme.
+  it("reads the movie from the kept list, never from Radarr directly", async () => {
+    mockCachedMovies.mockResolvedValue([{ id: 1, tmdbId: 42 }]);
+    const { GET } = await import("@/app/api/radarr/movies/[id]/info/route");
+    const res = await GET(fakeReq(), params("1"));
+    expect(res.status).toBe(200);
+    expect(mockRadarr.getMovie).not.toHaveBeenCalled();
+  });
+
+  it("names a Radarr outage (502) instead of answering « not found »", async () => {
+    mockCachedMovies.mockRejectedValue(new Error("radarr ne répond pas"));
+    const { GET } = await import("@/app/api/radarr/movies/[id]/info/route");
+    const res = await GET(fakeReq(), params("1"));
+    expect(res.status).toBe(502);
+  });
+
   it("picks the official YouTube trailer over a non-official one", async () => {
-    mockRadarr.getMovie.mockResolvedValue({ id: 1, tmdbId: 42 });
+    mockCachedMovies.mockResolvedValue([{ id: 1, tmdbId: 42 }]);
     mockTmdb.getMovieVideos.mockResolvedValue({
       results: [
         { type: "Trailer", site: "YouTube", official: false, key: "unofficial" },
@@ -67,7 +90,7 @@ describe("GET /api/radarr/movies/[id]/info", () => {
   });
 
   it("falls back to a non-official trailer when no official one exists", async () => {
-    mockRadarr.getMovie.mockResolvedValue({ id: 1, tmdbId: 42 });
+    mockCachedMovies.mockResolvedValue([{ id: 1, tmdbId: 42 }]);
     mockTmdb.getMovieVideos.mockResolvedValue({
       results: [{ type: "Trailer", site: "YouTube", official: false, key: "unofficial" }],
     });
@@ -78,7 +101,7 @@ describe("GET /api/radarr/movies/[id]/info", () => {
   });
 
   it("matches the active download to this movie by id", async () => {
-    mockRadarr.getMovie.mockResolvedValue({ id: 1, tmdbId: 42 });
+    mockCachedMovies.mockResolvedValue([{ id: 1, tmdbId: 42 }]);
     mockRadarr.getQueue.mockResolvedValue({
       records: [{ movieId: 1, title: "Dune", status: "downloading", size: 100, sizeleft: 50, indexer: "x" }],
     });
@@ -88,8 +111,24 @@ describe("GET /api/radarr/movies/[id]/info", () => {
     expect(body.activeDownload).toMatchObject({ title: "Dune", status: "downloading" });
   });
 
+  // 18/11/2026 : la fiche du cinéma recevait les sous-titres de Bazarr et le téléchargement en cours (nom
+  // du torrent, indexeur), que seule la page de gestion affiche — et attendait Bazarr pour eux.
+  it("gives a plain account none of what only the management page shows, without asking Bazarr", async () => {
+    mockSession.mockImplementation(async () => ({ role: "user" }));
+    mockCachedMovies.mockResolvedValue([{ id: 1, tmdbId: 42 }]);
+    mockRadarr.getQueue.mockResolvedValue({ records: [{ movieId: 1, title: "Dune.2021.1080p-GRP", indexer: "x" }] });
+    const { GET } = await import("@/app/api/radarr/movies/[id]/info/route");
+    const body = await (await GET(fakeReq(), params("1"))).json();
+    expect(body.activeDownload).toBeNull();
+    expect(body.subtitles).toEqual([]);
+    expect(body.audioLanguages).toEqual([]);
+    expect(mockBazarr.getMovieDetails).not.toHaveBeenCalled();
+    expect(mockRadarr.getQueue).not.toHaveBeenCalled();
+    expect(body.tmdb).not.toBeNull();
+  });
+
   it("skips OMDb and TMDB calls when they are disabled/no imdbId", async () => {
-    mockRadarr.getMovie.mockResolvedValue({ id: 1, tmdbId: 42, imdbId: null });
+    mockCachedMovies.mockResolvedValue([{ id: 1, tmdbId: 42, imdbId: null }]);
     mockTmdb.isEnabled.mockReturnValue(false);
     const { GET } = await import("@/app/api/radarr/movies/[id]/info/route");
     const res = await GET(fakeReq(), params("1"));
@@ -143,7 +182,7 @@ describe("GET /api/radarr/movies/[id]/similar", () => {
     // Donc par le même cache : l'image demandée pour une carte du mode cinéma sert à la fiche,
     // et inversement. C'est ce qui permet à la fiche d'afficher le titre tel que ses propres
     // graphistes l'ont dessiné, et de retomber sur la typo quand il n'y en a pas.
-    mockRadarr.getMovie.mockResolvedValue({ id: 1, tmdbId: 42 });
+    mockCachedMovies.mockResolvedValue([{ id: 1, tmdbId: 42 }]);
     const { GET } = await import("@/app/api/radarr/movies/[id]/info/route");
     const body = await (await GET(fakeReq(), params("1"))).json();
     expect(body.logoUrl).toBe("https://image.tmdb.org/logo.png");

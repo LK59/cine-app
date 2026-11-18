@@ -267,7 +267,8 @@ export async function getTitleArt(tmdbId: number, mediaType: "movie" | "series")
         posterTextlessUrl: pickTextlessPoster(images.posters ?? []),
         posterByLang: postersByLang(images.posters ?? []),
       };
-    });
+      // Le catalogue attend ce visuel : une valeur expirée sert pendant le recalcul (`serveStale`).
+    }, { serveStale: true });
   /**
    * Le passage de `v2` à `v3` sans catalogue lent.
    *
