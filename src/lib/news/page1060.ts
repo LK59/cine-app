@@ -20,7 +20,7 @@ export const NEWS_1060_CONTENT: NewsContentByLang = {
       {
         title: "Lecteur",
         entries: [
-          { icon: "next", title: "Avancer sans attendre", text: "touchez +10 s ou −10 s autant de fois que vous voulez : le total s'affiche et la lecture suit.", badge: "" },
+          { icon: "next", title: "Avancer sans attendre", text: "touchez +10 s ou −10 s autant de fois que vous voulez.", badge: "" },
           { icon: "speed", title: "L'heure de fin", text: "sous le temps restant, pour savoir à quelle heure le film se termine.", badge: "" },
           { icon: "captions", title: "Revoir un passage", text: "après un retour de 10 s, les dialogues s'affichent le temps du passage, puis tout redevient comme avant.", badge: "" },
           { icon: "audio", title: "Le son repart aussitôt", text: "après une pause sur iPhone et iPad.", badge: "" },
@@ -74,7 +74,7 @@ export const NEWS_1060_CONTENT: NewsContentByLang = {
       {
         title: "Player",
         entries: [
-          { icon: "next", title: "Skip without waiting", text: "tap +10 s or −10 s as many times as you like: the total shows and playback follows.", badge: "" },
+          { icon: "next", title: "Skip without waiting", text: "tap +10 s or −10 s as many times as you like.", badge: "" },
           { icon: "speed", title: "End time", text: "under the time remaining, so you know when the film will finish.", badge: "" },
           { icon: "captions", title: "Replay a moment", text: "after going back 10 s, the dialogue is shown for that moment, then everything returns to how it was.", badge: "" },
           { icon: "audio", title: "Sound resumes instantly", text: "after a pause on iPhone and iPad.", badge: "" },
@@ -125,7 +125,7 @@ export const NEWS_1060_CONTENT: NewsContentByLang = {
       {
         title: "Reproductor",
         entries: [
-          { icon: "next", title: "Avanzar sin esperar", text: "toque +10 s o −10 s tantas veces como quiera: se muestra el total y la reproducción sigue.", badge: "" },
+          { icon: "next", title: "Avanzar sin esperar", text: "toque +10 s o −10 s tantas veces como quiera.", badge: "" },
           { icon: "speed", title: "Hora de fin", text: "bajo el tiempo restante, para saber a qué hora termina la película.", badge: "" },
           { icon: "captions", title: "Volver a ver un momento", text: "tras retroceder 10 s, los diálogos se muestran durante ese momento y luego todo vuelve a estar como antes.", badge: "" },
           { icon: "audio", title: "El sonido vuelve al instante", text: "tras una pausa en iPhone y iPad.", badge: "" },
@@ -176,7 +176,7 @@ export const NEWS_1060_CONTENT: NewsContentByLang = {
       {
         title: "Player",
         entries: [
-          { icon: "next", title: "Springen ohne Warten", text: "Tippen Sie so oft auf +10 s oder −10 s, wie Sie möchten: Die Summe wird angezeigt, die Wiedergabe folgt.", badge: "" },
+          { icon: "next", title: "Springen ohne Warten", text: "Tippen Sie so oft auf +10 s oder −10 s, wie Sie möchten.", badge: "" },
           { icon: "speed", title: "Endzeit", text: "unter der Restzeit, damit Sie wissen, wann der Film endet.", badge: "" },
           { icon: "captions", title: "Eine Stelle noch einmal", text: "nach 10 s zurück werden die Dialoge für diese Stelle angezeigt, danach ist alles wieder wie vorher.", badge: "" },
           { icon: "audio", title: "Der Ton ist sofort zurück", text: "nach einer Pause auf iPhone und iPad.", badge: "" },
