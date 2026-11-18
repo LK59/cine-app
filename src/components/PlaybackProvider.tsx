@@ -425,13 +425,24 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     // L'ouverture est préparée hors de la fonction de mise à jour, qui doit rester pure : la séance
     // en cours est lue par la référence que l'effet plus haut tient à jour.
     const current = currentSessionRef.current;
-    const introArt = current ? prepareIntro({ ...current, itemId: next.itemId, resumeAt }, current.openId) : null;
+    // Ce qu'un rechargement de page a posé ne vaut que pour l'élément qu'il rouvrait (chasse du
+    // 18/11/2026) : `fromReload`, `reloadAttempt`, `initialAudioStreamIndex`. Gardés par `...prev`,
+    // chaque épisode suivant d'une séance née d'un rechargement WebKit perdait l'ouverture animée
+    // (`introAllowedFor`), le lecteur serveur qui l'enchaînait attendait 3 s de grâce, s'annonçait
+    // `audio-reload`, négociait avec l'index de piste de l'épisode d'avant, et la bascule vers la
+    // version allégée n'y rechargeait plus la page (`shouldReloadDirect` : rechargement « déjà consommé »).
+    const notReloaded = { fromReload: undefined, reloadAttempt: undefined, initialAudioStreamIndex: undefined };
+    const introArt = current ? prepareIntro({ ...current, ...notReloaded, itemId: next.itemId, resumeAt }, current.openId) : null;
     // L'épisode suivant d'une séance allégée en hérite par la même règle (§78) : l'arrêt de l'épisode
     // vient d'être rapporté, et il a retenu son palier.
     const lighter = carriedLighter() ?? undefined;
     // `scene` ne passe pas à l'épisode suivant : il n'y en a pas pendant une scène, et après elle la
     // lecture est devenue ordinaire (`sceneMode.ts`).
-    setSession((prev) => (prev ? { ...prev, itemId: next.itemId, title: next.title, resumeAt, introArt, lighter, reloadCarry: undefined, scene: undefined, sceneWatchedMs: undefined } : prev));
+    setSession((prev) =>
+      prev
+        ? { ...prev, ...notReloaded, itemId: next.itemId, title: next.title, resumeAt, introArt, lighter, reloadCarry: undefined, scene: undefined, sceneWatchedMs: undefined }
+        : prev
+    );
   }, [prepareIntro]);
 
   // Resumes into a WebKit reload-based track switch — see PLAYER_RELOAD_INTENT_KEY. Runs once on
