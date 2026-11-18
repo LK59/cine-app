@@ -2240,6 +2240,7 @@ describe("l'échelle des reprises", () => {
     fillTask: Promise<void> | null;
     watchForFrozenClock: (at: number) => void;
     watchForStall: () => void;
+    ladder: { escalation: number; unplayedAttempts: number };
     frozenSince: number | null;
     frozenNudges: number;
   };
