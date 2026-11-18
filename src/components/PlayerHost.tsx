@@ -983,7 +983,16 @@ function ActivePlayer({
   // (DECISIONS.md §114) ; ce qui est propre au lecteur serveur reste ici — sa garde, et AirPlay.
   const handleClose = useCallback(() => {
     closePlayerSession({
-      claim: () => claimOnce(closedRef),
+      claim: () => {
+        if (!claimOnce(closedRef)) return false;
+        // Une négociation encore en vol est périmée dès la croix, pas au démontage : le lecteur reste
+        // monté le temps du fondu (`PLAYER_CLOSE_MS`), et une réponse arrivée pendant ce temps écrivait
+        // sa ligne `start` *après* le `stop` et lançait la lecture sous l'écran qui s'efface — la séance
+        // ouverte chez Jellyfin n'était jamais refermée (fermé 0,2 s après « Lire », chasse du 18/11/2026).
+        // Périmée, elle passe par `closeOrphan`, comme celle d'un lecteur démonté.
+        playbackGeneration.current += 1;
+        return true;
+      },
       leaveFullscreen: true,
       reportStop: () => reportStop("close"),
       stopReporting: stopPlaybackNow,

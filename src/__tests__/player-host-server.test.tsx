@@ -190,6 +190,21 @@ describe("lecteur serveur — une négociation qui répond trop tard", () => {
     expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
   });
 
+  it("fermé par la croix pendant la négociation (fondu en cours, encore monté) : refermée aussi, aucune ligne `start` après le `stop`", async () => {
+    stubFetch({ retenue: true });
+    render(<PlayerHost />);
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/jellyfin/playback/start", expect.anything()));
+
+    // La croix 0,2 s après « Lire » : le lecteur reste monté le temps du fondu, et la réponse arrive là.
+    fireEvent.click(screen.getByText("fermer"));
+    await act(async () => libererNegociation());
+
+    await waitFor(() => expect(stopOrphanSession).toHaveBeenCalledTimes(1));
+    expect(lignes("stop")).toHaveLength(1);
+    expect(lignes("start")).toHaveLength(0);
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+  });
+
   it("une négociation à l'heure n'est pas refermée", async () => {
     stubFetch();
     render(<PlayerHost />);
