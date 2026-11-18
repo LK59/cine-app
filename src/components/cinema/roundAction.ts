@@ -9,7 +9,10 @@
  * et l'or des deux états allumés avait disparu. Un bouton porte la forme et **une seule** des deux teintes.
  */
 export const ROUND_ACTION_SHAPE =
-  "flex h-11 w-11 shrink-0 items-center justify-center rounded-full float-edge transition-[color,background-color,box-shadow] duration-200 focus-visible:outline-none";
+  "flex h-11 w-11 shrink-0 items-center justify-center rounded-full float-edge transition-[color,background-color,box-shadow] duration-200 focus-visible:outline-none " +
+  // Sous 600 px de haut, sur ordinateur seulement (18/11/2026, portable zoomé — voir `TINY_HIDE`) : un rond plus
+  // petit ; au doigt il garde ses 44 px.
+  "[@media(max-height:599px)_and_(pointer:fine)]:h-9 [@media(max-height:599px)_and_(pointer:fine)]:w-9";
 
 /** Éteint : le verre, le sélecteur blanc au clavier. */
 export const ROUND_ACTION_IDLE = "bg-black/55 text-white hover:bg-white/15 focus-visible:bg-white focus-visible:text-ink";

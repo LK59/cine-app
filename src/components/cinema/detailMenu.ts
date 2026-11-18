@@ -20,7 +20,9 @@
  */
 export const MENU_ROW =
   "group relative flex w-full items-center gap-3 rounded-lg px-4 py-1.5 text-left transition-[color,background-color,transform] duration-200 " +
-  "focus-visible:outline-none [@media(min-height:720px)]:py-2 [@media(min-height:820px)]:py-2.5";
+  "focus-visible:outline-none [@media(min-height:720px)]:py-2 [@media(min-height:820px)]:py-2.5 " +
+  // Sous 600 px de haut, sur ordinateur (portable zoomé, 18/11/2026) : lignes et pastilles resserrées — voir `TINY_HIDE`.
+  "[@media(max-height:599px)_and_(pointer:fine)]:py-1";
 
 /**
  * Le sélecteur.
@@ -44,7 +46,7 @@ export const MENU_ROW_INACTIVE =
  */
 export const MENU_BADGE =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-current/15 transition-[color,background-color,box-shadow] duration-200 " +
-  "[@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8";
+  "[@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8 [@media(max-height:599px)_and_(pointer:fine)]:h-6 [@media(max-height:599px)_and_(pointer:fine)]:w-6";
 
 /**
  * La pastille d'une action déjà accomplie : dans ma liste, déjà vu.
@@ -57,7 +59,7 @@ export const MENU_BADGE =
  */
 export const MENU_BADGE_ACTIVE =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-brand ring-1 ring-brand/60 " +
-  "transition-[color,background-color,box-shadow] duration-200 [@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8";
+  "transition-[color,background-color,box-shadow] duration-200 [@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8 [@media(max-height:599px)_and_(pointer:fine)]:h-6 [@media(max-height:599px)_and_(pointer:fine)]:w-6";
 
 /**
  * Rendre la main à la première action de la fiche.
