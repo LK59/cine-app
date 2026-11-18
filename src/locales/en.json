@@ -1844,6 +1844,20 @@
       "visualEffects": "Visual effects",
       "lighting": "Lighting",
       "creator": "Creator"
+    },
+    "role": {
+      "self": "Self",
+      "himself": "Himself",
+      "herself": "Herself",
+      "themselves": "Themselves",
+      "voice": "voice",
+      "uncredited": "uncredited",
+      "archiveFootage": "archive footage",
+      "archiveSound": "archive sound",
+      "narrator": "narrator",
+      "host": "host",
+      "presenter": "presenter",
+      "guest": "guest"
     }
   },
   "search": {

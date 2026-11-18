@@ -20,6 +20,7 @@ import { createPortal } from "react-dom";
 import type { EnrichedPersonData } from "@/app/api/tmdb/person/[id]/enriched/route";
 import { selectBio } from "@/lib/format";
 import { useT, useLocale } from "@/components/TranslationProvider";
+import { characterLabel } from "@/lib/characterLabel";
 import { getDateLocale } from "@/lib/i18n";
 
 interface Credit {
@@ -155,7 +156,7 @@ function CreditCard({ credit, onAdded }: { credit: Credit; onAdded: (tmdbId: num
       <div className="flex flex-1 flex-col gap-1.5 p-2">
         <p className="line-clamp-2 text-xs font-medium leading-snug text-white">{credit.title}</p>
         {credit.year && <p className="text-[11px] text-subtle">{credit.year}</p>}
-        {credit.character && <p className="line-clamp-1 text-[11px] italic text-subtle">{credit.character}</p>}
+        {credit.character && <p className="line-clamp-1 text-[11px] italic text-subtle">{characterLabel(credit.character, t)}</p>}
         {!isInLib && (
           <button onClick={handleAdd} disabled={adding}
             className="btn btn-ghost btn-sm btn-on mt-auto w-full">

@@ -4,6 +4,7 @@ import { memo } from "react";
 import { User } from "lucide-react";
 import { cinemaNavigate } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
+import { characterLabel } from "@/lib/characterLabel";
 
 /** Un membre de la distribution, tel que les routes `…/info` le donnent (TMDB, douze au plus). */
 export interface CinemaCastMember {
@@ -69,7 +70,7 @@ export const CinemaCastRow = memo(function CinemaCastRow({
             <span className="w-full">
               <span className="line-clamp-2 text-xs font-medium leading-tight text-white">{member.name}</span>
               {member.character && (
-                <span className="mt-0.5 line-clamp-1 text-[11px] leading-tight text-subtle">{member.character}</span>
+                <span className="mt-0.5 line-clamp-1 text-[11px] leading-tight text-subtle">{characterLabel(member.character, t)}</span>
               )}
             </span>
           </button>

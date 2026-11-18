@@ -45,6 +45,7 @@ import { canAutoSearchSeason, canAutoSearchSeries } from "@/lib/mediaPermissions
 import { MoreMenu } from "@/components/MoreMenu";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
+import { characterLabel } from "@/lib/characterLabel";
 import { apiAction } from "@/lib/apiAction";
 import { RequestRefused, refusalMessage } from "@/lib/requestRefusal";
 import { TitleLogo } from "@/components/TitleLogo";
@@ -686,7 +687,7 @@ export default function SonarrSeriesDetailPage() {
                     )}
                   </div>
                   <p className="truncate text-xs text-muted">{actor.name}</p>
-                  <p className="truncate text-[11px] text-subtle">{actor.character}</p>
+                  <p className="truncate text-[11px] text-subtle">{characterLabel(actor.character, t)}</p>
                 </button>
               );
             })}

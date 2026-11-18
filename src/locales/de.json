@@ -1844,6 +1844,20 @@
       "visualEffects": "Visuelle Effekte",
       "lighting": "Beleuchtung",
       "creator": "Idee"
+    },
+    "role": {
+      "self": "Als sich selbst",
+      "himself": "Er selbst",
+      "herself": "Sie selbst",
+      "themselves": "Sie selbst",
+      "voice": "Stimme",
+      "uncredited": "nicht im Abspann",
+      "archiveFootage": "Archivaufnahmen",
+      "archiveSound": "Archivton",
+      "narrator": "Erzähler",
+      "host": "Gastgeber",
+      "presenter": "Moderator",
+      "guest": "Gast"
     }
   },
   "search": {

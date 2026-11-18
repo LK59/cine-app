@@ -1844,6 +1844,20 @@
       "visualEffects": "Effets visuels",
       "lighting": "Lumière",
       "creator": "Création"
+    },
+    "role": {
+      "self": "Dans son propre rôle",
+      "himself": "Lui-même",
+      "herself": "Elle-même",
+      "themselves": "Eux-mêmes",
+      "voice": "voix",
+      "uncredited": "non crédité",
+      "archiveFootage": "images d'archives",
+      "archiveSound": "archives sonores",
+      "narrator": "narrateur",
+      "host": "animateur",
+      "presenter": "présentateur",
+      "guest": "invité"
     }
   },
   "search": {

@@ -22,6 +22,7 @@ import { DetailSkeleton } from "@/components/DetailSkeleton";
 import { RatingBadge } from "@/components/RatingBadge";
 import { apiAction } from "@/lib/apiAction";
 import { useT, useLocale } from "@/components/TranslationProvider";
+import { characterLabel } from "@/lib/characterLabel";
 import { getDateLocale } from "@/lib/i18n";
 import { useToast } from "@/components/Toast";
 
@@ -124,7 +125,7 @@ function CreditCard({ c }: { c: PersonCredit }) {
     >
       <div className="flex flex-1 flex-col gap-1 p-2">
         <p className="line-clamp-2 text-xs font-medium leading-snug text-white">{c.title}</p>
-        {c.character && <p className="line-clamp-1 text-[11px] text-subtle italic">{c.character}</p>}
+        {c.character && <p className="line-clamp-1 text-[11px] text-subtle italic">{characterLabel(c.character, t)}</p>}
         {c.year && <p className="text-[11px] text-subtle">{c.year}</p>}
       </div>
     </MediaCard>

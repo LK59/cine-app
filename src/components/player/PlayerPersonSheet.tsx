@@ -14,6 +14,7 @@ import { getDateLocale } from "@/lib/i18n";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack } from "@/lib/cinemaRoute";
 import { useT, useLocale } from "@/components/TranslationProvider";
+import { characterLabel } from "@/lib/characterLabel";
 import { useErrorText } from "@/lib/useErrorText";
 import { PlayerResultCard } from "./PlayerResultCard";
 import type { PersonPhoto } from "@/app/api/tmdb/person/[id]/photos/route";
@@ -219,13 +220,13 @@ function openCredit(c: PersonCredit) {
   }
 }
 
-function creditCard(c: PersonCredit) {
+function creditCard(c: PersonCredit, t: (key: string) => string) {
   return (
     <PlayerResultCard
       key={`${c.mediaType}-${c.tmdbId}`}
       kind={c.mediaType === "movie" ? "movie" : "series"}
       title={c.title}
-      subtitle={c.character || (c.year ? String(c.year) : null)}
+      subtitle={characterLabel(c.character, t) || (c.year ? String(c.year) : null)}
       poster={c.posterPath ? `${TMDB_POSTER}${c.posterPath}` : null}
       missing={!c.inLibrary}
       onOpen={() => openCredit(c)}
@@ -254,13 +255,14 @@ const PersonFilmography = memo(function PersonFilmography({
   inLibraryLabel: string;
   elsewhereLabel: string;
 }) {
+  const t = useT();
   return (
     <>
       {owned.length > 0 && (
         <section className="mt-8">
           <h2 className="mb-4 font-display text-lg font-semibold text-white">{inLibraryLabel}</h2>
           <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5">
-            {owned.map(creditCard)}
+            {owned.map((c) => creditCard(c, t))}
           </div>
         </section>
       )}
@@ -268,7 +270,7 @@ const PersonFilmography = memo(function PersonFilmography({
         <section className="mt-8">
           <h2 className="mb-4 font-display text-lg font-semibold text-white">{elsewhereLabel}</h2>
           <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5">
-            {elsewhere.map(creditCard)}
+            {elsewhere.map((c) => creditCard(c, t))}
           </div>
         </section>
       )}
