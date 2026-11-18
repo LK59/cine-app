@@ -5,6 +5,7 @@ import { detectCodecSupport } from "@/lib/codecSupport";
 import { useSWRConfig } from "swr";
 import { isAwaitingFresh } from "@/lib/persistentCache";
 import { setWatchingFullScreen } from "@/lib/playbackBusy";
+import { holdLandscape } from "@/lib/landscapeLock";
 import { flushOrphanStops } from "@/lib/unsentStop";
 import { flushUnsentLines } from "@/lib/unsentLines";
 import { flushUnsentPositions, unsentPositionsPending } from "@/lib/unsentPosition";
@@ -233,6 +234,12 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setWatchingFullScreen(mode === "full");
     return () => setWatchingFullScreen(false);
+  }, [mode]);
+
+  // En plein écran, l'écran reste couché là où le navigateur le permet (Android) — `landscapeLock.ts`.
+  useEffect(() => {
+    if (mode !== "full") return;
+    return holdLandscape();
   }, [mode]);
 
   // « Reprendre » et « À suivre » sont relus à la fermeture par `refreshAfterPlayback`, appelé par
