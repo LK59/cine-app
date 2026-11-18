@@ -2705,6 +2705,35 @@ describe("l'échelle des reprises", () => {
     await flush();
     expect(remuxer.seeks.length).toBeGreaterThan(0);
   });
+
+  it("une horloge qui court sans média ne compte pas comme de la lecture pour l'échelle", async () => {
+    // Chasse du 18/11/2026 : les trois secondes « jouées » qui remettent l'échelle à zéro étaient
+    // comptées même sans rien sous la tête — exactement le temps qu'il faut à la tête partie pour se
+    // déclarer. Chaque reprise d'une horloge qui s'enfuit effaçait donc l'échelle, et le moteur
+    // reprenait sans fin au lieu de monter jusqu'au passage de main.
+    const video = fakeVideo();
+    Object.assign(video, { seeking: false });
+    const remuxer = fakeRemuxer(500);
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn(), onStall: vi.fn() });
+    const internals = internalsOf(mse);
+    await until(() => internals.fillTask === null && video.buffered.length > 0, "le premier remplissage est fini");
+    if (internals.watchdogTimer) clearInterval(internals.watchdogTimer);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    internals.ladder.escalation = 1;
+    internals.ladder.unplayedAttempts = 7;
+
+    let at = 400;
+    setTime(video, at);
+    internals.watchForStall();
+    for (let i = 0; i < 20; i++) {
+      vi.setSystemTime(Date.now() + 250);
+      at += 0.25;
+      setTime(video, at);
+      internals.watchForStall();
+    }
+    expect(internals.ladder.escalation).toBeGreaterThanOrEqual(1);
+    expect(internals.ladder.unplayedAttempts).toBeGreaterThanOrEqual(7);
+  });
 });
 
 describe("MseSource sur un élément qui refuse srcObject", () => {

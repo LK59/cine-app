@@ -1829,7 +1829,11 @@ export class MseSource {
     // neither, and does not count towards leaving the ladder.
     const delta = now - this.tickClockAt;
     this.tickClockAt = now;
-    if (running && !this.video.seeking && delta > 0 && delta < 0.6) {
+    // Et avec du média sous la tête (chasse du 18/11/2026) : une horloge qui court sans rien dessous
+    // comptait ses trois secondes — le délai même où la tête partie se déclare (`RUNAWAY_REPORT_SECONDS`)
+    // —, et chaque reprise d'une tête partie remettait l'échelle à zéro ; elle ne montait jamais
+    // jusqu'à l'image clé suivante ni au passage de main.
+    if (running && !this.video.seeking && delta > 0 && delta < 0.6 && this.isBufferedAt(now)) {
       this.ladder.playedSinceTrouble += delta;
       if (this.ladder.playedSinceTrouble >= PLAYED_TO_CLEAR_SECONDS) {
         this.ladder.escalation = 0;
