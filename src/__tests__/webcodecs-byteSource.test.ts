@@ -446,6 +446,29 @@ describe("HttpByteSource — une taille déjà connue", () => {
     expect(counted.heads).toBe(5);
   });
 
+  it("une taille d'avance trop grande : la fin périmée n'est demandée qu'une fois, sans « instable »", async () => {
+    // Chasse du 18/11/2026 : un fichier remplacé plus petit sous la même adresse (FileFlows), Jellyfin
+    // ayant encore l'ancienne taille. Le dernier morceau d'avance tombe au-delà de la vraie fin : 416,
+    // pris pour une panne réseau, redemandé quatre fois en 2,3 s sous « Connexion perdue ou instable… ».
+    const { resetNetworkTrouble, subscribeNetworkTrouble } = await import("@/lib/networkTrouble");
+    resetNetworkTrouble();
+    const seen: boolean[] = [];
+    const stop = subscribeNetworkTrouble((v) => seen.push(v));
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit & { headers?: Record<string, string> }) => {
+      const [, from, to] = /bytes=(\d+)-(\d+)/.exec(init?.headers?.Range ?? "")!.map(Number);
+      asked.push([from, to]);
+      if (from >= SIZE) return { status: 416, headers: { get: (n: string) => (n === "Content-Range" ? `bytes */${SIZE}` : null) }, arrayBuffer: async () => new ArrayBuffer(0) };
+      return { status: 206, headers: { get: () => `bytes ${from}-${to}/${SIZE}` }, arrayBuffer: async () => new Uint8Array(to - from + 1).buffer };
+    });
+    const source = await HttpByteSource.open("/film.mkv", SIZE + 2 * CHUNK);
+    await source.read(0, 16);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(asked.filter(([from]) => from >= SIZE)).toHaveLength(1);
+    expect(seen).not.toContain(true);
+    stop();
+    source.close();
+  });
+
   it("se range à la taille que le serveur annonce quand celle d'avance était fausse", async () => {
     // Une description gardée en mémoire toute la session, et un fichier remplacé entre-temps : le
     // `Content-Range` de la première plage dit la vérité, avant que rien n'ait été lu.
