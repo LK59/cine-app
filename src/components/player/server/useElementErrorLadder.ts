@@ -177,6 +177,9 @@ export function useElementErrorLadder({
       }
       setReconnecting(false);
       setLoading(false);
+      // Le renoncement, au journal avec sa cause — voir `reportFailure` (wireServerHls.ts). Le chien de
+      // garde des 20 s est désarmé par l'écran d'erreur lui-même (PlayerHost).
+      reportPlayback("error", serverFailureFields(logContext.current, `élément : code ${code ?? "?"}, essais épuisés`, { code: code ?? 0 }));
       setError(t('player.playbackInterrupted'));
     }
     video.addEventListener("error", onError);

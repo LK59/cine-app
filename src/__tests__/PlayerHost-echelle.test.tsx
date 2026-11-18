@@ -203,6 +203,26 @@ describe("échelle du son — caractérisation", () => {
     expect(sessionStorage.getItem("reload-intent")).toBeNull();
     await waitFor(() => expect(document.body.textContent).toContain("player.playbackInterrupted"));
   });
+
+  it("échelle épuisée : la vraie cause au journal, et le chien de garde des 20 s n'écrase ni l'écran ni la cause", { timeout: 20_000 }, async () => {
+    // *Des gens bien* dans Chrome (chasse du 18/11/2026) : « La lecture a été interrompue » sans ligne
+    // `error`, puis 18 s plus tard « pas de première image en 20 s » et « Le chargement prend trop de temps ».
+    playback.session = { itemId: "film", openId: 1, resumeAt: 120, title: "Film", reloadAttempt: 1 };
+    stubFetch();
+    render(<PlayerHost />);
+    await nextNegotiation(1);
+    for (let n = 2; n <= 4; n++) {
+      failElement();
+      await nextNegotiation(n);
+    }
+    failElement();
+    await waitFor(() => expect(document.body.textContent).toContain("player.playbackInterrupted"));
+    await act(() => vi.advanceTimersByTimeAsync(25_000));
+    const errors = reportPlayback.mock.calls.filter(([k]) => k === "error").map(([, f]) => (f as { reason: string }).reason);
+    expect(errors).toEqual([expect.stringMatching(/^élément : code \d+, essais épuisés$/)]);
+    expect(document.body.textContent).toContain("player.playbackInterrupted");
+    expect(document.body.textContent).not.toContain("player.loadingTooLong");
+  });
 });
 
 /**
