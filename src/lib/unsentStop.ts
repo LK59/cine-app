@@ -33,6 +33,19 @@ const PREFIX = "cine:unsent-stop:";
  * la recherche des bilans ne le confond pas avec l'un d'eux.
  */
 const ALIVE_PREFIX = "cine:unsent-stop-alive:";
+/**
+ * Un bilan déjà envoyé comme perdu, et ce qu'il disait du temps regardé (chasse du 18/11/2026).
+ *
+ * Une séance vivante dans un *autre* onglet n'est pas dans `livingHere` de celui-ci. Un Mac qui dort
+ * fige ses minuteries : au réveil, l'onglet sans film passait le premier, trouvait le bilan de l'onglet
+ * au film muet depuis plus de deux minutes, et l'envoyait « perdu » ; l'onglet au film le réécrivait
+ * ensuite (sa signature change au réveil), et au sommeil suivant tout recommençait. Une séance de
+ * *Peaky Blinders* ouverte six jours sur un Mac a ainsi écrit 22 lignes `stop "lost"` identiques
+ * (`watched: 1`), chacune suivie de deux appels à Jellyfin (`recoverLostPosition`). Ce qui a été envoyé
+ * est noté ici : un bilan qui n'a pas regardé davantage depuis ne repart pas ; s'il a regardé plus, il
+ * repart (la lecture hebdomadaire garde la dernière ligne d'une séance).
+ */
+const SENT_PREFIX = "cine:unsent-stop-sent:";
 /** Deux minutes sans signe de vie : la séance vivante en donne un toutes les 30 s au plus. */
 export const ORPHAN_AFTER_MS = 2 * 60_000;
 
@@ -94,6 +107,7 @@ export function clearUnsentStop(session: string): void {
   try {
     localStorage.removeItem(PREFIX + session);
     localStorage.removeItem(ALIVE_PREFIX + session);
+    localStorage.removeItem(SENT_PREFIX + session);
   } catch {
     // Rien à faire.
   }
@@ -109,6 +123,16 @@ function lastAlive(key: string, savedAt: number): number {
   }
 }
 
+/** Le temps regardé du bilan déjà envoyé comme perdu pour cette séance, ou `null`. */
+function sentWatched(session: string): number | null {
+  try {
+    const sent = JSON.parse(localStorage.getItem(SENT_PREFIX + session) ?? "null") as { watched?: unknown } | null;
+    return typeof sent?.watched === "number" ? sent.watched : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Les bilans restés en plan, prêts à envoyer — sans les retirer : ils ne partent du stockage
  * qu'une fois acceptés (voir `flushOrphanStops`).
@@ -120,6 +144,17 @@ export function findOrphanStops(now = Date.now(), account: string | null = persi
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const key = localStorage.key(i);
+      // Les traces d'envoi d'une séance qui ne revient plus : oubliées au bout d'une semaine.
+      if (key?.startsWith(SENT_PREFIX)) {
+        let at = 0;
+        try {
+          at = Number((JSON.parse(localStorage.getItem(key) ?? "null") as { at?: unknown } | null)?.at) || 0;
+        } catch {
+          at = 0;
+        }
+        if (now - at > OTHER_ACCOUNT_KEEP_MS) localStorage.removeItem(key);
+        continue;
+      }
       if (!key?.startsWith(PREFIX)) continue;
       let saved: Saved | null = null;
       try {
@@ -150,6 +185,10 @@ export function findOrphanStops(now = Date.now(), account: string | null = persi
         if (now - saved.savedAt > OTHER_ACCOUNT_KEEP_MS) localStorage.removeItem(key);
         continue;
       }
+      // Déjà envoyé perdu, et rien regardé de plus depuis : la séance vit dans un autre onglet (voir
+      // `SENT_PREFIX`). Gardé : si elle regarde encore puis meurt, son bilan plus long partira.
+      const already = sentWatched(key.slice(PREFIX.length));
+      if (already !== null && typeof saved.fields.watched === "number" && saved.fields.watched <= already) continue;
       // En retard depuis son dernier signe de vie : c'est là que la séance s'est tue (§42).
       found.push({ key, fields: { ...saved.fields, why: "lost", lateByMs: now - aliveAt } });
     }
@@ -191,6 +230,9 @@ async function sendOrphans(now: number): Promise<void> {
         // 400 : le serveur ne veut pas de cette ligne, et ne la voudra jamais.
         localStorage.removeItem(key);
         localStorage.removeItem(ALIVE_PREFIX + key.slice(PREFIX.length));
+        if (typeof fields.watched === "number") {
+          localStorage.setItem(SENT_PREFIX + key.slice(PREFIX.length), JSON.stringify({ watched: fields.watched, at: now }));
+        }
       }
       // Tout autre refus (session absente, trop de lignes, serveur qui redémarre) vaut pour les
       // suivantes aussi : le tour s'arrête là, comme celui de `unsentLines` (08/10/2026).

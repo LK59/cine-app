@@ -145,6 +145,39 @@ describe("un appareil partagé", () => {
       touchUnsentStop("aaaa", 1000);
       vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200 })));
       await flushOrphanStops(1000 + ORPHAN_AFTER_MS + 1);
+      // Seule reste la trace de l'envoi (`SENT_PREFIX`), et seulement pour un bilan qui dit son temps regardé.
+      expect(localStorage.length).toBe(0);
+    });
+  });
+
+  describe("une séance vivante dans un autre onglet (18/11/2026)", () => {
+    // Un Mac endormi : au réveil, l'onglet sans film envoyait « perdu » le bilan de l'onglet au film,
+    // qui le réécrivait ensuite — 22 lignes `stop "lost"` identiques pour une séance en six jours.
+    it("un bilan déjà envoyé perdu ne repart pas tant qu'il n'a pas regardé davantage", async () => {
+      const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+      saveUnsentStop("autre", { itemId: "a", watched: 1 }, 0);
+      await flushOrphanStops(ORPHAN_AFTER_MS + 1);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // L'onglet au film, réveillé, le réécrit ; puis il se rendort.
+      saveUnsentStop("autre", { itemId: "a", watched: 1 }, 3 * ORPHAN_AFTER_MS);
+      await flushOrphanStops(6 * ORPHAN_AFTER_MS);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // Il a regardé davantage avant de mourir : ce bilan-là part.
+      saveUnsentStop("autre", { itemId: "a", watched: 300 }, 7 * ORPHAN_AFTER_MS);
+      await flushOrphanStops(10 * ORPHAN_AFTER_MS);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      // Son vrai arrêt efface tout.
+      clearUnsentStop("autre");
+      expect(localStorage.length).toBe(0);
+    });
+
+    it("la trace d'envoi s'oublie au bout d'une semaine", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200 })));
+      saveUnsentStop("vieux", { itemId: "a", watched: 5 }, 0);
+      await flushOrphanStops(ORPHAN_AFTER_MS + 1);
+      expect(localStorage.length).toBe(1);
+      findOrphanStops(8 * 24 * 3600_000);
       expect(localStorage.length).toBe(0);
     });
   });
