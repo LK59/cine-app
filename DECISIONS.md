@@ -10459,17 +10459,31 @@ service dit donc, **frontière par frontière**, si l'on peut y revenir et d'où
   conversation continue par-dessus le changement de plan) ;
 - `pauses` (version 2) : chaque silence d'au moins 5 s qui suit une prise de parole, `[début, fin]`, dans la scène
   où il **commence** (sa fin peut la dépasser : Laterna le mesure entier).
+- **`cutsVersion` 3** (18/11/2026, service 1.7.0) : sûre aussi `fondu` — un plan presque tout noir (97 % des
+  pixels sous 24 de luminance, lu sur les histogrammes gardés des plans, `shots.hist`), de 5 s au plus, à 2 s près
+  de la coupe ; le point d'entrée passe alors après le noir. Testé après `parole` (une phrase qui traverse le noir
+  le refuse) et soumis à `muet` et `enchaîné`, pas à `court` (le noir dit à lui seul qu'une scène finit). Mesuré
+  sur 120 titres : 7,6 % des frontières ont un tel noir, les deux tiers étaient refusées `même-lieu` — la couleur
+  du noir ne dit rien du lieu. Banc du 18/11/2026 (deux tirages de ~240 titres analysés qui parlent, une reprise
+  toutes les 10 s, règles de Laterna sans l'absence ni les segments Jellyfin) : bouton à **4,7 → 6,7 %** et
+  **5,2 → 7,0 %** des positions, 7 et 3 propositions perdues sur ~3 300 (l'entrée après le noir les rapproche de la
+  position) ; onze nouvelles cibles regardées image par image, dix justes (un noir, puis un autre lieu ou une autre
+  scène), une discutable (une coupure publicitaire de série : la même scène reprend après le noir). Les séries
+  américaines y gagnent le plus, leurs actes finissent au noir.
 
 Les règles s'appliquent **à la lecture** de `/scenes` : `CUTS_VERSION` (servie comme `cutsVersion`) ne touche pas
 aux mesures gardées, qui portent leur propre version, `BOUNDS_VERSION` (1) — monter la première vaut aussitôt pour
 tous les résultats mesurés, sans rattrapage ; seule la seconde relance `backfill_some`.
 
 Côté Laterna, la décision est **une fonction pure**, `decideSceneRestart` (`src/lib/sceneRestart.ts`), dans l'ordre
-de ses refus : analyse complète et mesurée, parole connue et ≥ 20 % du temps, absence ≥ 4 h (Jellyfin,
-`UserData.LastPlayedDate`), ni saut ni changement de piste avant la première image, pas dans la première minute,
+de ses refus : pas dans la première minute (testé **d'abord** depuis le 18/11/2026 : un épisode jamais lu, enchaîné
+après le précédent, n'a pas de dernière lecture et se comptait en `absence-inconnue`, un refus, alors qu'il n'y avait
+rien à reprendre), analyse complète et mesurée, parole connue et ≥ 20 % du temps, absence ≥ 4 h (Jellyfin,
+`UserData.LastPlayedDate`), ni saut ni changement de piste avant la première image,
 ni dans l'intro, le récap, le générique de fin ou les dernières scènes sans visage, aucune coupe sûre dans les
 20 dernières secondes ; la cible est la dernière coupe sûre ≥ 20 s avant la position, à son `entry`, de 20 à
-**90 s** en arrière (`trop-loin`), jamais `début` ni `après-saut` (`cible-début`, `cible-après-saut` : des bords de
+**90 s** en arrière (`trop-loin`, qui porte depuis le 18/11/2026 le recul qu'il aurait fallu : `non:trop-loin:142`
+— au banc, 85 % des positions tombent là, plus des deux tiers à plus de 5 min), jamais `début` ni `après-saut` (`cible-début`, `cible-après-saut` : des bords de
 l'analyse, pas des débuts reconnus) ; **aucune frontière refusée** entre la cible et la position, `même-lieu`
 compris (`coupe-<raison>`), ni sans verdict (`coupe-inconnue`) ; chaque scène de la cible à la position porte ses
 silences (sinon `pauses-inconnues` : un service en `cutsVersion` 1 ne fait rien proposer) et **aucun silence de 5 s**
@@ -10516,10 +10530,11 @@ n'est jamais une cible (`cible-début`) ; `début` et `après-saut` restent pour
 position : sinon `absence-inconnue`.
 
 **Tests.** `scene-restart-143.test.ts` (la décision sur les frontières de *Ted Lasso* et du *Flambeau* telles que
-le service les rendait en version 1, les cibles refusées, le recul de 90 s, les silences, la séance, le journal), `scene-restart-hook-143.test.tsx` (coupé : mesuré et jamais montré ;
+le service les rendait en version 1, les cibles refusées, le recul de 90 s et sa mesure, le début de fichier avant
+toute autre raison, les silences, la séance, le journal), `scene-restart-hook-143.test.tsx` (coupé : mesuré et jamais montré ;
 allumé : huit secondes, issues, une fois par séance), `scene-restart-payload-143.test.ts` (le passage par
 `scenesForPlayer`), `jellyfin-playback-state-route.test.ts` (`lastPlayedAt`) ; côté service
-`xray/tests/test_scenecuts.py` (chapitres, mesures, entrée, règles, deux signaux resserrés, silences, `/scenes`
+`xray/tests/test_scenecuts.py` (chapitres, mesures, entrée, règles, deux signaux resserrés, plans noirs et fondu, silences, `/scenes`
 inchangé sans mesure, résultats d'avant, règles nouvelles sans nouvelle mesure).
 
 ## 144. Le mode « Immersion » : une affiche de plus dans la recherche, et un projet à part (10/11/2026)

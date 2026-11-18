@@ -4,9 +4,9 @@
  * des trois lecteurs (`PlayerControls` : natif, serveur, hors ligne) et par ses tests — elle ne lit ni réseau,
  * ni horloge, ni stockage : tout lui est donné.
  *
- * Les débuts de scène et leur verdict viennent de `laterna-xray` (`xray/app/scenecuts.py`, `cutsVersion` 2) :
+ * Les débuts de scène et leur verdict viennent de `laterna-xray` (`xray/app/scenecuts.py`, `cutsVersion` 3) :
  * `cut.ok` dit si une frontière est un vrai début de scène (début du fichier, après une plage sautée, chapitre
- * d'auteur, ou couleurs **et** personnes qui changent entre deux scènes d'au moins 40 s, sur un temps de silence,
+ * d'auteur, fondu au noir — depuis la version 3 —, ou couleurs **et** personnes qui changent entre deux scènes d'au moins 40 s, sur un temps de silence,
  * avec une réplique dans la minute), `cut.why` pourquoi non (`parole`, `même-lieu`, `montage`, `îlot`, `court`,
  * `muet`, `enchaîné`), `entry` le point d'entrée (reculé jusqu'au début d'une phrase commencée juste avant la
  * coupe), et `pauses` les silences d'au moins 5 s qui suivent une prise de parole, rangés dans la scène où ils
@@ -14,19 +14,23 @@
  *
  * Les règles, dans l'ordre où elles refusent (la raison part au journal, `sceneRestart: "non:<raison>"`) :
  *
- * 1. l'analyse est complète et finie, mesurée (`cut` sur les scènes), et la parole connue ;
- * 2. le titre parle (20 % du temps au moins) : sans dialogues, rien ne dit où une scène commence vraiment ;
- * 3. une absence de 4 h au moins depuis la dernière lecture (Jellyfin, `LastPlayedDate`, gelée à l'ouverture) ;
- * 4. aucun saut ni changement de piste avant la première image ;
- * 5. pas dans la première minute du fichier, ni dans l'intro, le récap, le générique de fin (segments de
+ * 1. une reprise : pas dans la première minute du fichier (`début-du-fichier`) — tester d'abord, car un épisode
+ *    jamais lu (enchaîné après le précédent) n'a pas de dernière lecture et se comptait en `absence-inconnue`,
+ *    un refus, alors que ce n'était pas une reprise (18/11/2026) ;
+ * 2. l'analyse est complète et finie, mesurée (`cut` sur les scènes), et la parole connue ;
+ * 3. le titre parle (20 % du temps au moins) : sans dialogues, rien ne dit où une scène commence vraiment ;
+ * 4. une absence de 4 h au moins depuis la dernière lecture (Jellyfin, `LastPlayedDate`, gelée à l'ouverture) ;
+ * 5. aucun saut ni changement de piste avant la première image ;
+ * 6. pas dans l'intro, le récap, le générique de fin (segments de
  *    Jellyfin) ou les dernières scènes sans visage (le générique que Jellyfin ne connaît pas) ;
- * 6. aucune coupe sûre dans les 20 dernières secondes (la scène vient de commencer : rien à rattraper) ;
- * 7. la cible : la dernière coupe sûre au moins 20 s avant la position, prise à son point d'entrée, de 20 s à
- *    90 s en arrière — et jamais le début du fichier ni la reprise après une plage sautée (`cible-début`,
+ * 7. aucune coupe sûre dans les 20 dernières secondes (la scène vient de commencer : rien à rattraper) ;
+ * 8. la cible : la dernière coupe sûre au moins 20 s avant la position, prise à son point d'entrée, de 20 s à
+ *    90 s en arrière (`trop-loin` porte le recul qu'il aurait fallu, `non:trop-loin:142`, pour savoir si relever
+ *    le plafond servirait) — et jamais le début du fichier ni la reprise après une plage sautée (`cible-début`,
  *    `cible-après-saut`) : ce sont des bords de l'analyse, pas des débuts de scène reconnus ;
- * 8. aucune frontière refusée entre la cible et la position, quelle qu'en soit la raison (`coupe-<raison>`), ni
+ * 9. aucune frontière refusée entre la cible et la position, quelle qu'en soit la raison (`coupe-<raison>`), ni
  *    sans verdict : la scène où l'on revient ne serait plus celle qu'on regardait ;
- * 9. aucun silence d'au moins 5 s commencé après le point d'entrée et avant la position (`pause`) : la scène a
+ * 10. aucun silence d'au moins 5 s commencé après le point d'entrée et avant la position (`pause`) : la scène a
  *    changé de temps, sinon de lieu, sans que l'image le dise.
  *
  * Mesuré le 10/11/2026 (R&D, 17 titres, une position toutes les 10 s, cibles jugées à l'œil) : avec une cible
@@ -84,7 +88,7 @@ export interface SceneRestartInput {
 
 export type SceneRestartDecision =
   | { offer: true; target: number; back: number; why: string }
-  | { offer: false; reason: string };
+  | { offer: false; reason: string; back?: number };
 
 const no = (reason: string): SceneRestartDecision => ({ offer: false, reason });
 
@@ -98,6 +102,7 @@ const NOT_A_TARGET = new Set(["début", "après-saut"]);
 
 export function decideSceneRestart(input: SceneRestartInput): SceneRestartDecision {
   const { payload, position: p } = input;
+  if (!Number.isFinite(p) || p < SCENE_RESTART_MIN_POSITION_S) return no("début-du-fichier");
   if (!payload || payload.status !== "done" || !payload.complete) return no("analyse-incomplète");
   const scenes = [...payload.scenes].sort((a, b) => a.start - b.start);
   if (!scenes.some((s) => s.cut)) return no("coupes-absentes");
@@ -107,7 +112,6 @@ export function decideSceneRestart(input: SceneRestartInput): SceneRestartDecisi
   if (!Number.isFinite(last)) return no("absence-inconnue");
   if (input.now - last < SCENE_RESTART_MIN_ABSENCE_MS) return no("absence-courte");
   if (input.interrupted) return no(input.interrupted);
-  if (!Number.isFinite(p) || p < SCENE_RESTART_MIN_POSITION_S) return no("début-du-fichier");
   const inside = (r: { start: number; end: number } | null | undefined) => !!r && p >= r.start && p < r.end;
   if (inside(input.introSkip)) return no("intro");
   if (inside(input.recapSkip)) return no("récap");
@@ -125,7 +129,7 @@ export function decideSceneRestart(input: SceneRestartInput): SceneRestartDecisi
   const target = candidates.reduce((a, b) => (entryOf(b) > entryOf(a) ? b : a));
   const entry = entryOf(target);
   const back = p - entry;
-  if (back > SCENE_RESTART_MAX_BACK_S) return no("trop-loin");
+  if (back > SCENE_RESTART_MAX_BACK_S) return { offer: false, reason: "trop-loin", back };
   const why = target.cut?.why ?? "";
   if (NOT_A_TARGET.has(why)) return no(`cible-${why}`);
   // De la cible à la position : chaque frontière a un verdict et aucune n'est refusée — rien ne s'enjambe, pas

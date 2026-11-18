@@ -141,6 +141,17 @@ describe("les conditions", () => {
     expect(at(TED, 200, { lastPlayedAt: null })).toBe("absence-inconnue");
     expect(at(TED, 200, { lastPlayedAt: "pas une date" })).toBe("absence-inconnue");
   });
+  it("un début de fichier n'est pas une reprise, avant toute autre raison (18/11/2026)", () => {
+    // Un épisode jamais lu, enchaîné après le précédent : ni dernière lecture, ni analyse peut-être — il se
+    // comptait en `absence-inconnue`, un refus, alors qu'il n'y avait rien à reprendre.
+    expect(at(TED, 0, { lastPlayedAt: null })).toBe("début-du-fichier");
+    expect(at(TED, 30, { lastPlayedAt: null, payload: null, interrupted: "saut" })).toBe("début-du-fichier");
+    expect(at(TED, Number.NaN)).toBe("début-du-fichier");
+  });
+  it("`trop-loin` dit le recul qu'il aurait fallu", () => {
+    expect(decideSceneRestart(input(TED, 1410))).toEqual({ offer: false, reason: "trop-loin", back: 1410 - 1319.75 });
+    expect(decideSceneRestart(input(TED, 200, { lastPlayedAt: null }))).toEqual({ offer: false, reason: "absence-inconnue" });
+  });
   it("une analyse complète, mesurée, d'un titre qui parle", () => {
     const base = input(TED, 200).payload!;
     expect(at(TED, 200, { payload: null })).toBe("analyse-incomplète");
@@ -242,11 +253,13 @@ describe("le journal", () => {
     logPlaybackEvent("louis", "stop", { sceneRestart: "non:coupe-parole" });
     logPlaybackEvent("louis", "stop", { sceneRestart: "proposé:utilisé" });
     logPlaybackEvent("louis", "debut-scene", { outcome: "ignoré", target: 131.923, back: 68 });
-    const [full, refused, used, line] = lines();
+    logPlaybackEvent("louis", "stop", { sceneRestart: "non:trop-loin:142" });
+    const [full, refused, used, line, far] = lines();
     expect(full.sceneRestart).toBe("aurait-proposé");
     expect(refused.sceneRestart).toBe("non:coupe-parole");
     expect(used.sceneRestart).toBe("proposé:utilisé");
     expect(line).toMatchObject({ kind: "debut-scene", outcome: "ignoré", target: 131.923, back: 68 });
+    expect(far.sceneRestart).toBe("non:trop-loin:142");
   });
 
   it("n'écrit qu'une valeur de la forme attendue", async () => {
@@ -254,6 +267,8 @@ describe("le journal", () => {
     logPlaybackEvent("louis", "stop", { sceneRestart: "<script>" });
     logPlaybackEvent("louis", "stop", { sceneRestart: "proposé:peut-être" });
     logPlaybackEvent("louis", "stop", { sceneRestart: 3 });
+    logPlaybackEvent("louis", "stop", { sceneRestart: "non:trop-loin:abc" });
+    logPlaybackEvent("louis", "stop", { sceneRestart: "aurait-proposé:12" });
     for (const line of lines()) expect(line).not.toHaveProperty("sceneRestart");
   });
 });

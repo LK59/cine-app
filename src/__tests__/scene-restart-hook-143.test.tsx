@@ -66,6 +66,13 @@ describe("useSceneRestart", () => {
     expect(sent).toEqual([]);
   });
 
+  it("trop loin : le bilan porte le recul qu'il aurait fallu (18/11/2026)", () => {
+    const { rerender } = renderHook((p: Props) => useSceneRestart(p), { initialProps: base });
+    // 98 s → 241,6 s : 143,6 s en arrière, au-delà des 90 s.
+    rerender({ ...base, currentTime: 241.6, playing: true, settled: true });
+    expect(sceneRestartLogFields(ID)).toEqual({ sceneRestart: "non:trop-loin:144" });
+  });
+
   it("sans les acteurs à l'écran : rien ne tourne, rien n'est retenu", () => {
     const { rerender } = renderHook((p: Props) => useSceneRestart(p), { initialProps: { ...base, offered: false } });
     rerender({ ...base, offered: false, currentTime: 150, playing: true, settled: true });

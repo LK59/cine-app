@@ -117,7 +117,8 @@ export function useSceneRestart({
         creditsStart,
         interrupted: entry.interrupted ?? null,
       });
-      if (!decision.offer) return noteSceneRestartVerdict(itemId, `non:${decision.reason}`);
+      // `trop-loin` porte le recul qu'il aurait fallu, en secondes entières (`non:trop-loin:142`).
+      if (!decision.offer) return noteSceneRestartVerdict(itemId, `non:${decision.reason}${decision.back !== undefined ? `:${Math.round(decision.back)}` : ""}`);
       const facts = { at: Math.round(first.at * 10) / 10, target: decision.target, back: Math.round(decision.back), why: decision.why };
       if (!shown) return noteSceneRestartVerdict(itemId, "aurait-proposé", facts);
       noteSceneRestartVerdict(itemId, "proposé", { ...facts, shownAt: first.when });

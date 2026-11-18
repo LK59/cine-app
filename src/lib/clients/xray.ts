@@ -80,7 +80,8 @@ export interface XrayScene {
   /**
    * « Revenir au début de la scène » (ajout compatible du 10/11/2026, DECISIONS.md §143, `xray/app/scenecuts.py`) :
    * pour un résultat complet et mesuré, d'où repartir (reculé jusqu'au début d'une phrase commencée juste avant la
-   * coupe) et si ce début de scène en est un vrai (`why` : `début`, `après-saut`, `chapitre`, `deux-signaux` ; refusé :
+   * coupe — après le noir pour un `fondu`) et si ce début de scène en est un vrai (`why` : `début`, `après-saut`, `chapitre`,
+   * `deux-signaux`, et depuis `cutsVersion` 3 `fondu` ; refusé :
    * `parole`, `même-lieu`, `montage`, `îlot`, et depuis `cutsVersion` 2 `court`, `muet`, `enchaîné`). Absents sinon.
    */
   entry?: number;

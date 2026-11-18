@@ -623,7 +623,7 @@ the card carries `lab` in `CONFIG_LAYOUT` — a blind pass on 24 unseen titles c
 too-early target, so it stays off and nothing else reads `cut`).
 On a resume after ≥ 4 h, a button offers for 8 s to go back to the start of the current scene — only to a *real*
 scene start, which the service decides per boundary (`xray/app/scenecuts.py`: `entry` and `cut {ok, why}` on
-`/scenes`, an authored chapter or colours **and** people changing, never mid-dialogue, and since `CUTS_VERSION` 2
+`/scenes`, an authored chapter, a fade to black (since `CUTS_VERSION` 3) or colours **and** people changing, never mid-dialogue, and since `CUTS_VERSION` 2
 never beside a scene under 40 s, without a line in the next minute or with less than 1.5 s of silence at the cut;
 `pauses`, the ≥ 5 s silences, per scene; rules apply at read time, the stored measures carry `BOUNDS_VERSION`, so a
 rule change needs no backfill; `RESULT_VERSION` untouched, existing scenes and people byte-identical). Laterna goes

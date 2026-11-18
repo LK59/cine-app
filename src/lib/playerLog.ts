@@ -130,11 +130,11 @@ export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "er
 const SLEEP_TIMER_VALUES = new Set(["15", "30", "60", "90", "episode"]);
 /**
  * `sceneRestart` du bilan (§143) : ce que « Revenir au début de la scène » a décidé — `aurait-proposé` (bouton
- * coupé), `proposé:<issue>`, `non:<raison>`. Une forme fixe, et hors du plafond des quarante champs comme
+ * coupé), `proposé:<issue>`, `non:<raison>` (`non:trop-loin:<recul en s>` depuis le 18/11/2026). Une forme fixe, et hors du plafond des quarante champs comme
  * `sleepTimer` : ajoutée à un bilan déjà plein, elle aurait été la première à tomber — et c'est la mesure qui
  * décide d'allumer le bouton.
  */
-const SCENE_RESTART_VALUE = /^(?:aurait-proposé|proposé:(?:utilisé|ignoré|saut|fermé)|non:[a-zà-ÿ-]{1,40})$/;
+const SCENE_RESTART_VALUE = /^(?:aurait-proposé|proposé:(?:utilisé|ignoré|saut|fermé)|non:[a-zà-ÿ-]{1,40}(?::\d{1,6})?)$/;
 
 export function isPlayerEventKind(value: unknown): value is PlayerEventKind {
   return typeof value === "string" && KINDS.has(value);
