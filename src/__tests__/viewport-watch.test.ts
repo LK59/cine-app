@@ -3,9 +3,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { watchViewportStuck } from "@/lib/viewportWatch";
 
 /**
- * La hauteur que iOS 26 laisse coincée dans l'application installée (04–05/11/2026) : relevée, pas
- * réparée — trois réparations mesurées sans effet ont été retirées. Le relevé dit quand une version
- * d'iOS l'aura corrigée.
+ * La hauteur que iOS 26 laisse coincée dans l'application installée (04–05/11/2026) : relevée — trois
+ * réparations mesurées sans effet ont été retirées, une quatrième (la remise à l'origine) est à l'essai depuis
+ * le 18/11/2026. Le relevé dit si elle sert, et quand une version d'iOS l'aura corrigée.
  */
 
 let height = 800;
@@ -75,6 +75,39 @@ describe("watchViewportStuck", () => {
     const { stop } = setup();
     comeBack();
     expect(reports.at(-1)).toMatchObject({ decision: "coincée", best: 800 });
+    stop();
+  });
+
+  // La remise à l'origine à l'essai (18/11/2026) : trois fois, puis une seconde mesure qui dit si elle a réparé.
+  it("remet la page à l'origine en trois temps et relève l'avant, l'après et `fixed`", () => {
+    const { stop } = setup();
+    const scrollTo = vi.fn(() => {
+      height = 800;
+    });
+    window.scrollTo = scrollTo as unknown as typeof window.scrollTo;
+    height = 500;
+    comeBack();
+    expect(scrollTo).toHaveBeenCalledTimes(3);
+    expect(reports.at(-1)).toMatchObject({ decision: "coincée", repair: "scrollTo", before: { inner: 500 }, after: { inner: 800 }, fixed: true });
+    // Sans effet : dit aussi.
+    window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
+    height = 500;
+    comeBack();
+    expect(reports.at(-1)).toMatchObject({ repair: "scrollTo", fixed: false });
+    stop();
+  });
+
+  it("jamais pendant une saisie", () => {
+    const { shell, stop } = setup();
+    const scrollTo = vi.fn();
+    window.scrollTo = scrollTo as unknown as typeof window.scrollTo;
+    height = 500;
+    const input = document.createElement("input");
+    shell.appendChild(input);
+    input.focus();
+    comeBack();
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(reports.at(-1)).not.toHaveProperty("repair");
     stop();
   });
 });

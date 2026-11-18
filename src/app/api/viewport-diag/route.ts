@@ -19,7 +19,7 @@ import { viewportDiagAllowed } from "@/lib/writeLimits";
  * Le compte vient de la session, jamais du corps. Seuls les champs connus, bornés ; le reste tombe.
  * Rien n'est renvoyé.
  */
-const SNAPSHOT_FIELDS = ["inner", "outer", "width", "vv", "vvTop", "client", "shell", "shellTop", "scrollY"] as const;
+const SNAPSHOT_FIELDS = ["inner", "outer", "width", "vv", "vvTop", "client", "shell", "shellTop", "scrollY", "vvScale", "bodyTop"] as const;
 /** Les mesures en pixels d'une ligne `clavier`. */
 const KEYBOARD_NUMBERS = ["inner", "outer", "innerW", "client", "vv", "vvTop", "vvPageTop", "baseline", "scrollY", "screenW", "screenH", "layerTop", "panelTop", "panelBottom", "inputTop", "inputBottom"] as const;
 const DECISIONS = new Set(["rien", "coincée", "champ", "film"]);
@@ -297,6 +297,8 @@ export async function POST(req: NextRequest) {
     decision: typeof body.decision === "string" && DECISIONS.has(body.decision) ? body.decision : null,
     best: px(body.best),
     before: snapshotOf(body.before),
+    // La remise à l'origine à l'essai (18/11/2026, `viewportWatch.ts`) : la mesure d'après, et si elle a réparé.
+    ...(body.repair === "scrollTo" ? { repair: "scrollTo", after: snapshotOf(body.after), fixed: body.fixed === true } : {}),
     screen: str(body.screen, 20),
     build: str(body.build, 40),
     version: str(body.version, 20),

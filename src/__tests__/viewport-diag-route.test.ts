@@ -49,6 +49,13 @@ describe("POST /api/viewport-diag", () => {
     expect(line).not.toHaveProperty("extra");
   });
 
+  it("la remise à l'origine à l'essai (18/11/2026) : l'après et `fixed`, seulement pour une réparation connue", async () => {
+    await post({ trigger: "redimensionné", decision: "film", best: 430, before: { inner: 0, vvScale: 1000, bodyTop: 0 }, repair: "scrollTo", after: { inner: 430 }, fixed: true });
+    expect(mockLog.mock.calls[0][0]).toMatchObject({ repair: "scrollTo", before: { inner: 0, vvScale: 1000, bodyTop: 0 }, after: { inner: 430 }, fixed: true });
+    await post({ trigger: "retour", decision: "coincée", best: 932, before: { inner: 585 }, repair: "autre", after: { inner: 932 } });
+    expect(mockLog.mock.calls[1][0]).not.toHaveProperty("after");
+  });
+
   it("sans session : 401, rien d'écrit", async () => {
     mockVerifySessionFull.mockResolvedValue(null);
     expect((await post({})).status).toBe(401);
