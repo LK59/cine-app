@@ -469,6 +469,26 @@ describe("HttpByteSource — une taille déjà connue", () => {
     source.close();
   });
 
+  it("fermée pendant une relecture sur l'appareil, elle ne va pas chercher le morceau au réseau", async () => {
+    // Chasse du 18/11/2026 : un morceau noté sur l'appareil mais illisible (évincé, mauvaise taille)
+    // retombe sur le réseau après l'attente de l'appareil — sans regarder si la source avait été
+    // fermée ou le morceau abandonné entre-temps : un mégaoctet téléchargé pour personne.
+    stubFetch();
+    let release!: (bytes: Uint8Array | null) => void;
+    const disk = {
+      has: (index: number) => index === 0,
+      read: () => new Promise<Uint8Array | null>((resolve) => (release = resolve)),
+      verify: () => {},
+    };
+    const source = await HttpByteSource.open("/film.mkv", SIZE, disk);
+    await settle();
+    asked = [];
+    source.close();
+    release(null);
+    await settle();
+    expect(chunksAsked()).not.toContain(0);
+  });
+
   it("se range à la taille que le serveur annonce quand celle d'avance était fausse", async () => {
     // Une description gardée en mémoire toute la session, et un fichier remplacé entre-temps : le
     // `Content-Range` de la première plage dit la vérité, avant que rien n'ait été lu.

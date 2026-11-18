@@ -955,6 +955,10 @@ export class HttpByteSource implements ByteSource {
       } catch {
         /* l'appareil n'est qu'une avance : le réseau répond */
       }
+      // Fermée, ou ce morceau abandonné pour un saut, pendant l'attente de l'appareil : plus personne
+      // ne l'attend. Le réseau partait quand même — un signal déjà coupé ne déclenche plus son
+      // écouteur `abort`, la requête n'était jamais annulée (chasse du 18/11/2026).
+      if (own.aborted || this.controller.signal.aborted) throw new ReadAbandoned();
     }
     return this.fetchWithRetries(start, end, own);
   }
