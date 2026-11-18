@@ -4,7 +4,7 @@ import { createTmdbClient, pickTrailer } from "@/lib/clients/tmdb";
 import { movieTmdbFacts } from "@/lib/titleInfoShape";
 import { jellyfinOnlyInfo } from "@/lib/jellyfinOnlyInfo";
 import { getTmdbLocale, localeOf } from "@/lib/i18n";
-import { cachedOmdbRating, cachedRadarrQueue, cachedTmdbMovieInfo, hiddenFromCaller } from "@/lib/titleInfoCache";
+import { cachedOmdbRating, cachedRadarrQueue, cachedTmdbMovieInfo, callerManages, hiddenFromCaller } from "@/lib/titleInfoCache";
 import { getTitleLogoFor } from "@/lib/title-logo";
 import { cachedMovies } from "@/lib/server-cache";
 import { upstreamFailure } from "@/lib/upstreamResponse";
@@ -39,11 +39,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   }
 
   // Les parties stables passent par le cache — voir `titleInfoCache.ts`.
+  // Les sous-titres de Bazarr et la file de Radarr (nom du torrent, indexeur) : pour la page de gestion
+  // seule — voir `callerManages`. Un autre compte reçoit les mêmes champs, vides.
+  const manages = await callerManages(req);
   const [tmdbPart, rating, subtitles, queue, logoUrl] = await Promise.all([
     tmdb.isEnabled() && movie.tmdbId ? cachedTmdbMovieInfo(tmdb, lang, movie.tmdbId).catch(() => null) : Promise.resolve(null),
     movie.imdbId ? cachedOmdbRating(movie.imdbId).catch(() => null) : Promise.resolve(null),
-    bazarr.getMovieDetails(id).catch(() => null),
-    cachedRadarrQueue().catch(() => ({ records: [] as any[] })),
+    manages ? bazarr.getMovieDetails(id).catch(() => null) : Promise.resolve(null),
+    manages ? cachedRadarrQueue().catch(() => ({ records: [] as any[] })) : Promise.resolve({ records: [] as any[] }),
     // Le logo du film — la même image que le mode cinéma affiche déjà, mise en cache une
     // semaine. Fetché avec le reste plutôt qu'après : il est en tête de page, c'est la première
     // chose qu'on voit, et il n'a aucune raison d'arriver en dernier.

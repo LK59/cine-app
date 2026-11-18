@@ -26,6 +26,10 @@ vi.mock("@/lib/clients/tmdb", async (importOriginal) => ({
   TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p",
 }));
 vi.mock("@/lib/i18n", () => ({ getTmdbLocale: () => "fr-FR", localeOf: () => "fr" }));
+// Qui demande : l'administrateur par défaut (la page de gestion lit les mêmes routes) ; un compte
+// ordinaire ne reçoit pas ce que seule la gestion affiche — voir `callerManages`.
+const mockSession = vi.fn(async (): Promise<{ role: string } | null> => ({ role: "admin" }));
+vi.mock("@/lib/session", () => ({ verifySessionFull: () => mockSession() }));
 const mockCachedSeries = vi.fn();
 vi.mock("@/lib/server-cache", () => ({
   cachedSeries: (...args: unknown[]) => mockCachedSeries(...args),
@@ -41,6 +45,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockSession.mockImplementation(async () => ({ role: "admin" }));
   mockOmdb.isEnabled.mockReturnValue(false);
   mockTmdb.isEnabled.mockReturnValue(true);
   mockTmdb.findTvByTvdbId.mockResolvedValue({ tv_results: [{ id: 100 }] });
@@ -91,6 +96,19 @@ describe("GET /api/sonarr/series/[id]/info", () => {
     expect(body.activeDownloads).toHaveLength(1);
     expect(body.activeDownloads[0].episodeId).toBe(10);
   });
+  // 18/11/2026 : chaque épisode avec son chemin sur le disque et le nom de sa sortie (Bazarr), et les
+  // téléchargements en cours, partaient à tout compte — 96 Ko et ~400 ms pour 108 épisodes.
+  it("gives a plain account none of what only the management page shows, without asking Bazarr", async () => {
+    mockSession.mockImplementation(async () => ({ role: "user" }));
+    mockCachedSeries.mockResolvedValue([{ id: 1, tvdbId: 555, imdbId: null }]);
+    mockBazarr.getEpisodesDetails.mockResolvedValue([{ path: "/media/tv/x.mkv", sceneName: "X.S01E01-GRP" }]);
+    const { GET } = await import("@/app/api/sonarr/series/[id]/info/route");
+    const body = await (await GET(fakeReq(), params("1"))).json();
+    expect(body.episodeSubtitles).toEqual([]);
+    expect(body.activeDownloads).toEqual([]);
+    expect(mockBazarr.getEpisodesDetails).not.toHaveBeenCalled();
+  });
+
   // 18/11/2026 : même décision que la fiche d'un film — la liste gardée au chaud, et une panne nommée.
   it("names a Sonarr outage (502) instead of answering « not found », without asking Sonarr", async () => {
     mockCachedSeries.mockRejectedValue(new Error("sonarr ne répond pas"));

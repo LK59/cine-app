@@ -20,6 +20,10 @@ vi.mock("@/lib/clients/tmdb", async (importOriginal) => ({
   TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p",
 }));
 vi.mock("@/lib/i18n", () => ({ getTmdbLocale: () => "fr-FR", localeOf: () => "fr" }));
+// Qui demande : l'administrateur par défaut (la page de gestion lit les mêmes routes) ; un compte
+// ordinaire ne reçoit pas ce que seule la gestion affiche — voir `callerManages`.
+const mockSession = vi.fn(async (): Promise<{ role: string } | null> => ({ role: "admin" }));
+vi.mock("@/lib/session", () => ({ verifySessionFull: () => mockSession() }));
 const mockCachedMovies = vi.fn();
 vi.mock("@/lib/server-cache", () => ({
   cachedMovies: (...args: unknown[]) => mockCachedMovies(...args),
@@ -35,6 +39,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockSession.mockImplementation(async () => ({ role: "admin" }));
   mockOmdb.isEnabled.mockReturnValue(false);
   mockTmdb.isEnabled.mockReturnValue(true);
   mockTmdb.getMovie.mockResolvedValue({ overview: "o", genres: [], credits: { cast: [] } });
@@ -104,6 +109,22 @@ describe("GET /api/radarr/movies/[id]/info", () => {
     const res = await GET(fakeReq(), params("1"));
     const body = await res.json();
     expect(body.activeDownload).toMatchObject({ title: "Dune", status: "downloading" });
+  });
+
+  // 18/11/2026 : la fiche du cinéma recevait les sous-titres de Bazarr et le téléchargement en cours (nom
+  // du torrent, indexeur), que seule la page de gestion affiche — et attendait Bazarr pour eux.
+  it("gives a plain account none of what only the management page shows, without asking Bazarr", async () => {
+    mockSession.mockImplementation(async () => ({ role: "user" }));
+    mockCachedMovies.mockResolvedValue([{ id: 1, tmdbId: 42 }]);
+    mockRadarr.getQueue.mockResolvedValue({ records: [{ movieId: 1, title: "Dune.2021.1080p-GRP", indexer: "x" }] });
+    const { GET } = await import("@/app/api/radarr/movies/[id]/info/route");
+    const body = await (await GET(fakeReq(), params("1"))).json();
+    expect(body.activeDownload).toBeNull();
+    expect(body.subtitles).toEqual([]);
+    expect(body.audioLanguages).toEqual([]);
+    expect(mockBazarr.getMovieDetails).not.toHaveBeenCalled();
+    expect(mockRadarr.getQueue).not.toHaveBeenCalled();
+    expect(body.tmdb).not.toBeNull();
   });
 
   it("skips OMDb and TMDB calls when they are disabled/no imdbId", async () => {
