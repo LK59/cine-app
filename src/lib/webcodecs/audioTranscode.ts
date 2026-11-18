@@ -574,7 +574,9 @@ export class AudioTranscoder {
      * après l'image (DECISIONS.md §148). Comme pour « Améliorer les dialogues », un AAC multicanal
      * passe alors par le décodeur dont l'ordre des canaux est mesuré.
      */
-    copiedTrack = false
+    copiedTrack = false,
+    /** L'essai « lumen » (`RemuxOptions.audioChain`) : nos paquets et nos décodeurs. */
+    audioChain?: "lumen"
   ): Promise<AudioTranscoder> {
     const Encoder = (globalThis as { AudioEncoder?: typeof AudioEncoder }).AudioEncoder;
     if (!Encoder) throw new Error("Ce navigateur ne sait pas encoder de l'audio.");
@@ -586,7 +588,10 @@ export class AudioTranscoder {
     // promesse de `dialogueCanShape`, qui décide des deux.
     const measuredAacDecoder = ((!!dialogue && dialogue !== "off") || copiedTrack) && track.codecId === "A_AAC" && (track.audio?.channels ?? 2) > 2;
     // Lue sous le nom « son » : la fenêtre d'un saut dit ce que ce décodeur demande à côté du lecteur (`readingAs`).
-    const decoder = await SoftwareAudioTrack.open(readingAs(source, "son"), track.number, track.codecId, file, measuredAacDecoder ? { measuredAacDecoder } : {});
+    const decoder = await SoftwareAudioTrack.open(readingAs(source, "son"), track.number, track.codecId, file, {
+      ...(measuredAacDecoder ? { measuredAacDecoder } : {}),
+      ...(audioChain === "lumen" ? { demux: "nôtre" as const, decoders: "nôtres" as const } : {}),
+    });
     // Tout ce qui suit peut lever — l'amorçage qui échoue sur le décodeur, une description que
     // l'on ne sait pas relire —, et le décodeur (pour le TrueHD, un contexte WebAssembly) comme
     // l'encodeur amorcé n'ont encore aucun propriétaire : fermés ici, sur chaque sortie en erreur.

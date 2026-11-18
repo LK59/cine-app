@@ -16,6 +16,7 @@ import { aacDecoderRouteHere, aacPlan, remapPlanes } from "./aacConfig";
 import { effectivePceAnswer } from "./aacPceProbe";
 import type { ByteSource } from "./byteSource";
 import type { MatroskaFile } from "./matroska";
+import { registerCapturing } from "./decoderClasses";
 
 export interface SoftwareAudioFormat {
   sampleRate: number;
@@ -61,6 +62,14 @@ function sharedInput(source: ByteSource, core: Mediabunny, iso: boolean): Promis
 
 /** Par quel décodeur le dernier AAC à PCE s'est ouvert — pour la ligne `start` (DECISIONS.md §62). */
 let lastAacRoute: "wasm-decode" | "browser-decode" | null = null;
+
+/** La dernière piste ouverte par nos paquets (essai demux-son) — pour le banc. */
+let lastOwnDemux: import("./ownAudio").OwnAudioTrack | null = null;
+export function takeOwnDemux(): import("./ownAudio").OwnAudioTrack | null {
+  const own = lastOwnDemux;
+  lastOwnDemux = null;
+  return own;
+}
 
 /** Lu (et oublié) par qui écrit la ligne `start`. */
 export function takeAacDecodeRoute(): "wasm-decode" | "browser-decode" | null {
@@ -110,7 +119,16 @@ export class SoftwareAudioTrack {
      * 0,06 dB d'ffmpeg sur la VF de « Forrest Gump », 11/10/2026). Demandé par « Améliorer les
      * dialogues », qui remonte le rang 2 et ne doit pas parier sur l'ordre d'un autre décodeur.
      */
-    options: { measuredAacDecoder?: boolean } = {}
+    options: {
+      measuredAacDecoder?: boolean;
+      /**
+       * Essai du 19/11/2026 (audioDemux.ts) : les paquets lus par notre lecteur de conteneur et
+       * non par celui de mediabunny, qui ne garde que ses décodeurs. Absent : mediabunny, comme avant.
+       */
+      demux?: "nôtre";
+      /** Avec `demux`, l'essai de nos décodeurs AC-3/E-AC3/DTS (FFmpeg 7.1.5, tools/ac3dts-wasm). */
+      decoders?: "nôtres";
+    } = {}
   ): Promise<SoftwareAudioTrack> {
     // Le TrueHD ne passe pas par mediabunny, qui ne le connaît pas : notre propre décodeur, et
     // la même forme de sortie — voir truehd/truehdAudio.ts.
@@ -131,7 +149,7 @@ export class SoftwareAudioTrack {
     if (codecId === "A_AAC" && (aacDecoderRouteHere() === "wasm" || options.measuredAacDecoder)) return SoftwareAudioTrack.openWasmAac(source, trackNumber, file);
     if (codecId === "A_AAC") {
       try {
-        return await SoftwareAudioTrack.openWithMediabunny(source, trackNumber, codecId, file);
+        return await SoftwareAudioTrack.openWithMediabunny(source, trackNumber, codecId, file, options.demux);
       } catch (error) {
         try {
           return await SoftwareAudioTrack.openWasmAac(source, trackNumber, file);
@@ -140,7 +158,7 @@ export class SoftwareAudioTrack {
         }
       }
     }
-    return SoftwareAudioTrack.openWithMediabunny(source, trackNumber, codecId, file);
+    return SoftwareAudioTrack.openWithMediabunny(source, trackNumber, codecId, file, options.demux, options.decoders);
   }
 
   /** Un AAC à PCE par le décodeur de FFmpeg en WebAssembly — voir aac/aacWasmAudio.ts. */
@@ -165,7 +183,9 @@ export class SoftwareAudioTrack {
     source: ByteSource,
     trackNumber: number,
     codecId?: string,
-    file?: MatroskaFile
+    file?: MatroskaFile,
+    demux?: "nôtre",
+    decoders?: "nôtres"
   ): Promise<SoftwareAudioTrack> {
     // Dynamic, and only the extension this file actually needs: the two are a megabyte and a
     // half each, and a file whose audio the browser already decodes never pays for either.
@@ -173,17 +193,32 @@ export class SoftwareAudioTrack {
     try {
       core = await import("mediabunny");
       if (codecId === "A_DTS" || codecId?.startsWith("A_DTS/")) {
-        (await import("@mediabunny/dts")).registerDtsDecoder();
+        const { registerDtsDecoder } = await import("@mediabunny/dts");
+        registerCapturing(core, registerDtsDecoder);
       } else if (codecId === "A_FLAC") {
-        (await import("./flacDecoder")).registerFlacDecoder();
+        const { registerFlacDecoder } = await import("./flacDecoder");
+        registerCapturing(core, registerFlacDecoder);
       } else if (codecId === "A_OPUS" || codecId === "A_AAC") {
         // Rien à charger : mediabunny décode l'Opus — et l'AAC à PCE (voir aacConfig.ts) — par
         // l'AudioDecoder du navigateur. Charger ici le décodeur AC-3, c'était un mégaoctet pour rien.
       } else {
-        (await import("@mediabunny/ac3")).registerAc3Decoder();
+        const { registerAc3Decoder } = await import("@mediabunny/ac3");
+        registerCapturing(core, registerAc3Decoder);
       }
     } catch (error) {
       throw new Error(`décodeur audio non chargé (${error instanceof Error ? error.message : "import échoué"})`);
+    }
+    if (demux === "nôtre" && file) {
+      const own = (await import("./ownAudio")).openOwnAudioTrack(core, source, file, trackNumber, decoders ?? "mediabunny");
+      lastOwnDemux = own;
+      const shape = codecId === "A_AAC" ? aacShaping(file, trackNumber, own.format.numberOfChannels) : null;
+      if (codecId === "A_AAC") lastAacRoute = "browser-decode";
+      const produce = shape?.rows
+        ? (fromSeconds: number) => remapped(own.samples(fromSeconds), shape.rows!)
+        : shape && shape.channels < own.format.numberOfChannels
+          ? (fromSeconds: number) => firstPlanes(own.samples(fromSeconds), shape.channels)
+          : (fromSeconds: number) => own.samples(fromSeconds);
+      return new SoftwareAudioTrack(produce, { sampleRate: own.format.sampleRate, numberOfChannels: shape ? shape.channels : own.format.numberOfChannels }, () => {});
     }
     const { AudioSampleSink } = core;
     const input = await sharedInput(source, core, file?.mp4 !== undefined);
