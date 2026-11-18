@@ -196,6 +196,15 @@ describe("la version allégée (DECISIONS.md §78)", () => {
     expect(JSON.stringify(high.CodecProfiles)).toContain('"Value":"1920"');
   });
 
+  it("une image entrelacée est ré-encodée (désentrelacée) dans la version allégée — et seulement là", () => {
+    // *Des gens bien* (H.264 1080i) : copiée telle quelle, la marche H.264 rejouait l'image refusée par Chromium.
+    const interlaced = { Condition: "NotEquals", Property: "IsInterlaced", Value: "true", IsRequired: false };
+    for (const profile of buildDeviceProfile(h264Only, 120_000_000, { lighter: { targetBps: 120_000_000 } }).CodecProfiles.filter((p) => p.Type === "Video")) {
+      expect(profile.Conditions).toContainEqual(interlaced);
+    }
+    expect(JSON.stringify(buildDeviceProfile(chrome, 100_000_000))).not.toContain("IsInterlaced");
+  });
+
   it("H.264 sinon — et aussi avec un HEVC 8 bits seul (le maître de Jellyfin annonce Main10 pour une source 10 bits)", () => {
     expect(buildDeviceProfile(h264Only, 1_500_000, { lighter: { targetBps: 1_500_000 } }).TranscodingProfiles[0].VideoCodec).toBe("h264");
     expect(buildDeviceProfile(hevc8Only, 1_500_000, { lighter: { targetBps: 1_500_000 } }).TranscodingProfiles[0].VideoCodec).toBe("h264");
