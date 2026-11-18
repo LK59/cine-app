@@ -69,7 +69,28 @@ function seconds(h: string, m: string, s: string, fraction: string): number {
  */
 function plainText(lines: string[]): string {
   // Les blocs d'override sont retirés par `stripSubtitleMarkup`, qui garde la position voulue.
-  return stripSubtitleMarkup(lines.join("\n")).trim();
+  // Les entités ensuite, une fois les balises parties : un `<` décodé n'est plus une balise à retirer.
+  return decodeCueEntities(stripSubtitleMarkup(lines.join("\n"))).trim();
+}
+
+const NAMED_ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0", lrm: "\u200e", rlm: "\u200f" };
+
+/**
+ * Les échappements du WebVTT, rendus en caractères. Jellyfin convertit chaque fichier à côté du film
+ * en WebVTT et y échappe `&`, `<` et `>` comme la norme le demande ; le lecteur, qui dessine ses lignes
+ * lui-même, les affichait tels quels — « Town &amp; Country » (*Midnight in the Garden of Good and
+ * Evil*), et sur *Demon Slayer* des « &lt;couleur de police=" » (chasse du 18/11/2026). Un `<track>`
+ * du navigateur les décode de lui-même ; ici, c'est à nous. Une entité inconnue reste telle quelle.
+ */
+export function decodeCueEntities(text: string): string {
+  if (!text.includes("&")) return text;
+  return text.replace(/&(#x[0-9a-f]{1,6}|#[0-9]{1,7}|[a-z]{2,6});/gi, (whole, name: string) => {
+    if (name[0] === "#") {
+      const code = name[1] === "x" || name[1] === "X" ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+    }
+    return NAMED_ENTITIES[name.toLowerCase()] ?? whole;
+  });
 }
 
 /**
