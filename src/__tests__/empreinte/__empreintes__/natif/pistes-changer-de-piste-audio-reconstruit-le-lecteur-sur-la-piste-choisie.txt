@@ -62,7 +62,7 @@ dom menu player.audio
     input "player.volume" type=range value=1
     button "Français — 5.1"
     button "Anglais — 2.0"
-    button "player.dialogue.titleplayer.chromecast.beta"
+    button "player.dialogue.title"
     button "10"
     button "player.pause"
     button "10"
