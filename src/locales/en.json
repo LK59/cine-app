@@ -2077,6 +2077,11 @@
   "player": {
     "badConnection": "Unstable connection",
     "frameFit": "Fit to screen",
+    "lock": {
+      "menu": "Lock screen",
+      "hint": "Tap to unlock",
+      "confirm": "Tap again to unlock"
+    },
     "subtitleSizeXSmall": "Extra small",
     "subtitleSizeSmall": "Small",
     "subtitleSizeNormal": "Normal",

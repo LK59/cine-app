@@ -2077,6 +2077,11 @@
   "player": {
     "badConnection": "Instabile Verbindung",
     "frameFit": "An Bildschirm anpassen",
+    "lock": {
+      "menu": "Bildschirm sperren",
+      "hint": "Zum Entsperren tippen",
+      "confirm": "Zum Entsperren erneut tippen"
+    },
     "subtitleSizeXSmall": "Sehr klein",
     "subtitleSizeSmall": "Klein",
     "subtitleSizeNormal": "Normal",

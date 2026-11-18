@@ -2077,6 +2077,11 @@
   "player": {
     "badConnection": "Connexion instable",
     "frameFit": "Ajuster à l’écran",
+    "lock": {
+      "menu": "Verrouiller l’écran",
+      "hint": "Toucher pour déverrouiller",
+      "confirm": "Toucher encore pour déverrouiller"
+    },
     "subtitleSizeXSmall": "Très petite",
     "subtitleSizeSmall": "Petite",
     "subtitleSizeNormal": "Normale",

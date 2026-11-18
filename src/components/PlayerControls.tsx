@@ -7,6 +7,7 @@ import { Play, Pause, Maximize, Minimize, Captions, AudioLines, Loader2, RotateC
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import type { HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
+import { PlayerLockVeil } from "@/components/playerControls/PlayerLockVeil";
 import { createLiquidPress, prefersReducedMotion } from "@/lib/liquidGlass/liquid";
 import { usePrewarmEpisodes } from "@/components/player/PlayerEpisodesMenu";
 import { usePlayerItem } from "@/lib/usePlayerItem";
@@ -386,7 +387,13 @@ export function PlayerControls({
     setters: mirrorSetters,
   } = usePlaybackMirror();
   const { volumeSettable, probeVolume, toggleMute, changeVolume } = useVolumeControl(videoRef);
-  const [visible, setVisible] = useState(true);
+  const [shown, setVisible] = useState(true);
+  /**
+   * L'écran verrouillé (`PlayerLockVeil`, 18/11/2026) : les commandes se taisent et ne reparaissent pas, quoi qui les
+   * rappelle (une pause, la fin) — `visible` dit faux tant qu'il dure, et l'ancien état revient au déverrouillage.
+   */
+  const [locked, setLocked] = useState(false);
+  const visible = shown && !locked;
   /**
    * Masqués, les contrôles ne prennent la position qu'une fois par seconde (28/09/2026). Chaque
    * `timeupdate` (~4 par seconde) faisait recalculer tout ce composant, même invisible — du travail
@@ -843,7 +850,7 @@ export function PlayerControls({
     visible,
     setVisible,
     playing,
-    suspended: suspended || askOpen,
+    suspended: suspended || askOpen || locked,
     held: askOpen,
     hidden,
     resuming,
@@ -1318,6 +1325,7 @@ export function PlayerControls({
             dialogue={dialogue}
             hdrCap={hdrCap}
             frameFit={frameFit}
+            onLock={() => setLocked(true)}
             quality={quality}
             speed={speed}
             changeSpeed={changeSpeed}
@@ -1604,6 +1612,15 @@ export function PlayerControls({
           onClose={() => {
             setAskOpen(false);
             setAskPerson(null);
+            showControls();
+          }}
+        />
+      )}
+      {/* En dernier : au-dessus de tout, il avale chaque geste tant que l'écran est verrouillé. */}
+      {locked && (
+        <PlayerLockVeil
+          onUnlock={() => {
+            setLocked(false);
             showControls();
           }}
         />

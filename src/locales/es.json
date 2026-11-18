@@ -2077,6 +2077,11 @@
   "player": {
     "badConnection": "Conexión inestable",
     "frameFit": "Ajustar a la pantalla",
+    "lock": {
+      "menu": "Bloquear pantalla",
+      "hint": "Toca para desbloquear",
+      "confirm": "Toca otra vez para desbloquear"
+    },
     "subtitleSizeXSmall": "Muy pequeño",
     "subtitleSizeSmall": "Pequeño",
     "subtitleSizeNormal": "Normal",

@@ -125,6 +125,8 @@ export type SettingsMenuProps = {
   dialogue?: { mode: DialogueMode; applies: boolean; onChange: (mode: DialogueMode) => void };
   hdrCap?: { current: HdrCapChoice; autoNits: number | null; onPick: (choice: HdrCapChoice) => void };
   frameFit?: { on: boolean; onChange: (on: boolean) => void };
+  /** « Verrouiller l'écran » (`PlayerLockVeil`) ; la ligne ne paraît que sur un écran tactile (`menuViewsMore`). */
+  onLock?: () => void;
   quality: PlaybackQuality;
   speed: number;
   changeSpeed: (rate: number) => void;

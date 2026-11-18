@@ -4,7 +4,7 @@
  * leur place dans `PlayerSettingsMenu`, elles laissent l'arbre de React tel qu'il était.
  */
 
-import { Gauge, Info, ListVideo, MonitorSmartphone, Moon, Scan, Sun, Timer } from "lucide-react";
+import { Gauge, Info, ListVideo, Lock, MonitorSmartphone, Moon, Scan, Sun, Timer } from "lucide-react";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { formatTime } from "@/lib/playerClock";
 import { PlayerEpisodesMenu } from "@/components/player/PlayerEpisodesMenu";
@@ -13,9 +13,18 @@ import { noteViewerPresent } from "@/lib/autoAdvance";
 import { writePlaybackQuality } from "@/lib/playbackQuality";
 import { SLEEP_DURATIONS, sleepTimerStore, type SleepMode } from "@/lib/sleepTimer";
 import { MenuOption } from "@/components/playerControls/menuRows";
+import { INTERFACE_PROBES } from "@/lib/interfaceDecision";
 import type { MenuViewContext } from "@/components/playerControls/PlayerSettingsMenu";
 
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
+/**
+ * Un écran qu'on touche sans le survoler (`INTERFACE_PROBES.touch`), lu à l'ouverture du menu : seul lui a besoin de
+ * « Verrouiller l'écran ». Sans `matchMedia` (un environnement de test), non.
+ */
+function touchScreen(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(INTERFACE_PROBES.touch).matches;
+}
 
 /** « Auto · 203 nits », « Natif », « 400 nits » — le réglage de luminosité HDR, en mots. */
 function hdrCapLabel({ t, hdrCap }: MenuViewContext, choice: HdrCapChoice): string {
@@ -31,7 +40,7 @@ function hdrCapLabel({ t, hdrCap }: MenuViewContext, choice: HdrCapChoice): stri
    Les réglages des sous-titres vivent dans le menu des sous-titres : ils avaient ici
    la même icône que lui, et deux lignes de plus pour une question qui n'est pas d'ici. */
 export function moreView(v: MenuViewContext) {
-  const { t, setMenu, chapters, speed, sleepMode, sleepMinutes, onCastReturn, castActive, frameFit, onTogglePlaybackInfo, quality, hdrCap, downloadable, itemId, playerItem } = v;
+  const { t, setMenu, chapters, speed, sleepMode, sleepMinutes, onCastReturn, castActive, frameFit, onLock, onTogglePlaybackInfo, quality, hdrCap, downloadable, itemId, playerItem } = v;
   return (
     <>
       {chapters.length > 0 && (
@@ -101,6 +110,19 @@ export function moreView(v: MenuViewContext) {
               className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform ${frameFit.on ? "translate-x-4 bg-black" : "bg-white"}`}
             />
           </span>
+        </button>
+      )}
+      {/* L'écran verrouillé (18/11/2026) : au doigt seulement — à la souris ou au clavier, rien à protéger. */}
+      {onLock && touchScreen() && (
+        <button
+          data-player-lock-row=""
+          onClick={() => {
+            setMenu(null);
+            onLock();
+          }}
+          className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+        >
+          <Lock size={16} /> {t("player.lock.menu")}
         </button>
       )}
       <div data-menu-secondary className="border-t border-white/[0.08]">
