@@ -3,8 +3,8 @@ import type { NewsContentByLang } from "./content";
 /**
  * La page « 10.60 » — le récapitulatif des versions 10.40 à 10.59 (18/11/2026, demandé par le propriétaire).
  *
- * En **brouillon** (`seedNewsPage(…, "draft")`) : le propriétaire la relit et la publie depuis Activité → Nouveautés,
- * et c'est alors qu'elle s'annonce. Elle reprend, en plus court et en mots simples, ce que les pages discrètes 10.40,
+ * Semée en brouillon (`seedNewsPage(…, "draft")`), relue par le propriétaire, puis **publiée sur toute installation**
+ * (`publishNewsDraft`, 18/11/2026) : elle s'annonce une fois, la fenêtre s'ouvre. Elle reprend, en plus court et en mots simples, ce que les pages discrètes 10.40,
  * 10.43, 10.58 et 10.59 ont déjà rangé dans l'historique. Seulement ce que tout compte a, sans réglage : ni « À
  * l'écran » ni les fonctions de laboratoire. Le chiffre des corrections compte les livraisons de correctifs et de
  * petites améliorations depuis la 10.40 (85, dont 37 au registre ; plusieurs en regroupent beaucoup — retouches des
@@ -13,6 +13,8 @@ import type { NewsContentByLang } from "./content";
 export const NEWS_1060_VERSION = "10.60";
 /** Le marqueur dans `migrations_done` : posé une fois, la page n'est plus jamais réécrite. */
 export const NEWS_1060_SEED = "news-seed-10.60-draft";
+/** Publiée partout le 18/11/2026 (le propriétaire) : le brouillon devient une page annoncée, une fois par installation. */
+export const NEWS_1060_PUBLISH = "news-publish-10.60";
 
 export const NEWS_1060_CONTENT: NewsContentByLang = {
   fr: {

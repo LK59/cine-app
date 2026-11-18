@@ -21,7 +21,7 @@ import { NEWS_1040_CONTENT, NEWS_1040_SEED, NEWS_1040_VERSION } from "@/lib/news
 import { NEWS_1043_CONTENT, NEWS_1043_SEED, NEWS_1043_VERSION } from "@/lib/news/page1043";
 import { NEWS_1058_CONTENT, NEWS_1058_SEED, NEWS_1058_VERSION } from "@/lib/news/page1058";
 import { NEWS_1059_CONTENT, NEWS_1059_SEED, NEWS_1059_VERSION } from "@/lib/news/page1059";
-import { NEWS_1060_CONTENT, NEWS_1060_SEED, NEWS_1060_VERSION } from "@/lib/news/page1060";
+import { NEWS_1060_CONTENT, NEWS_1060_PUBLISH, NEWS_1060_SEED, NEWS_1060_VERSION } from "@/lib/news/page1060";
 import { config } from "@/lib/config";
 import { FIXES_LEDGER, RETIRED_LEDGER_ITEMS, ledgerMarker, ledgerTarget, withLedgerEntry, withoutLedgerItems, type FixLedgerEntry } from "@/lib/news/fixesLedger";
 import { NEWS_8672_CONTENT, NEWS_8672_FIRST_VERSION, NEWS_8672_REPUBLISH, NEWS_8672_SEED, NEWS_8672_VERSION } from "@/lib/news/page8672";
@@ -1061,9 +1061,10 @@ function migrate(db: Database.Database): void {
   seedQuietNewsPage(db, NEWS_1058_SEED, NEWS_1058_VERSION, NEWS_1058_CONTENT);
   // L'heure de fin, les sauts enchaînés, le prochain épisode (18/11/2026) : discrète aussi, pour tous.
   seedQuietNewsPage(db, NEWS_1059_SEED, NEWS_1059_VERSION, NEWS_1059_CONTENT);
-  // Le récapitulatif des versions 10.40 à 10.59 (18/11/2026) : en brouillon — le propriétaire la relit et la publie
-  // depuis Activité → Nouveautés.
+  // Le récapitulatif des versions 10.40 à 10.59 (18/11/2026) : semée en brouillon, relue par le propriétaire.
   seedNewsPage(db, NEWS_1060_SEED, NEWS_1060_VERSION, NEWS_1060_CONTENT, Date.now(), "draft");
+  // Relue et validée : publiée partout, une fois (18/11/2026) — la fenêtre s'ouvre pour chaque compte.
+  publishNewsDraft(db, NEWS_1060_PUBLISH, NEWS_1060_VERSION, NEWS_1060_CONTENT);
   // Les corrections livrées, ajoutées à l'historique des pages publiées (`fixesLedger.ts`).
   applyFixesLedger(db);
   retireLedgerItems(db);
