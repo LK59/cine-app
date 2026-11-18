@@ -810,6 +810,48 @@ describe("reculer dans l'index près du début", () => {
 });
 
 
+// L'ajout devant ce qui est déjà chargé (`MseSource.performSeek`, 18/11/2026) : une lecture bornée
+// s'arrête net avant l'image clé de la borne — jamais au milieu d'un groupe, qui recouvrirait le
+// chargé à moitié — et son null n'est pas la fin du fichier.
+describe("une lecture bornée", () => {
+  afterEach(() => {
+    readerSamples = [];
+  });
+
+  it("s'arrête avant la première image clé à la borne ou après, et le dit", async () => {
+    readerSamples = [0, 1, 2, 3, 4, 5].map((s) => idr(s * 1_000_000));
+    const remuxer = await open(null);
+    remuxer.seekTo(0, 2.5);
+    expect(remuxer.stopAhead).toBe(true);
+    const ends: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      const segment = await remuxer.nextSegment();
+      if (!segment) break;
+      ends.push(segment.endSeconds);
+    }
+    // Les images de 0, 1 et 2 s, pas celle de 3 s (la dernière dure une image, faute de suivante).
+    expect(Math.max(...ends)).toBeGreaterThan(2);
+    expect(Math.max(...ends)).toBeLessThan(3);
+    expect(remuxer.stoppedShort).toBe(true);
+    expect(remuxer.stopAhead).toBe(false);
+    // Un saut ordinaire oublie la borne.
+    remuxer.seekTo(4);
+    expect(remuxer.stoppedShort).toBe(false);
+    expect(remuxer.stopAhead).toBe(false);
+    remuxer.close();
+  });
+
+  it("sans borne, la fin du fichier n'est pas une borne", async () => {
+    readerSamples = [0, 1, 2].map((s) => idr(s * 1_000_000));
+    const remuxer = await open(null);
+    remuxer.seekTo(0);
+    while (await remuxer.nextSegment()) {
+      /* jusqu'au bout */
+    }
+    expect(remuxer.stoppedShort).toBe(false);
+    remuxer.close();
+  });
+});
 /**
  * Des blocs audio aux horodatages bousculés : « The Proposal » (balayage du 24/09/2026), AC-3 de
  * 32 ms arrondis à la milliseconde, parfois un peu en arrière du précédent, une fois 22 ms en

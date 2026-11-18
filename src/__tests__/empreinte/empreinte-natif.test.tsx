@@ -136,6 +136,8 @@ function fakeRemux(over: Record<string, unknown> = {}) {
     // Le départ retenu d'une ouverture depuis le début (`MseSource.openingHold`) : rien de retenu,
     // sauf dans le scénario qui le dit (`pipe.hold`).
     openingHold: () => pipe.hold,
+    // Comment un saut a été servi (`MseSource.seekPathFor`) : le moteur n'est pas simulé ici.
+    seekPathFor: () => null,
     ...over,
   };
   return fake;

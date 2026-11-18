@@ -655,11 +655,16 @@ export function ExperimentalPlayerHost({
     // l'endroit, si (chasse aux bugs du 22/09/2026).
     reportPlayback("seek", {
       ...describeFileRef.current(),
-      ...seekLineFields(tally, timing, {
-        ...(stillSeeking ? {} : { arrived: seekArrived(landedAt, timing.to) }),
-        ...(superseded ? { superseded: true } : {}),
-        landedAt: Math.round(landedAt * 10) / 10,
-      }),
+      ...seekLineFields(
+        tally,
+        timing,
+        {
+          ...(stillSeeking ? {} : { arrived: seekArrived(landedAt, timing.to) }),
+          ...(superseded ? { superseded: true } : {}),
+          landedAt: Math.round(landedAt * 10) / 10,
+        },
+        remuxRef.current?.seekPathFor(timing.to) ?? null
+      ),
     });
   };
   // Lu par le pipeline à travers une `ref` : le nommer dans ses dépendances le reconstruirait à
@@ -2297,7 +2302,7 @@ export function ExperimentalPlayerHost({
         if (timing) {
           tally.seekArrived(seekElapsed(tally, timing));
           // Les champs et leur ordre : `seekLineFields`, partagé avec `reportUnarrivedSeek`.
-          reportPlayback("seek", { ...describeFileRef.current(), ...seekLineFields(tally, timing) });
+          reportPlayback("seek", { ...describeFileRef.current(), ...seekLineFields(tally, timing, {}, remuxRef.current?.seekPathFor(timing.to) ?? null) });
         }
       };
       element.addEventListener("timeupdate", onTime);
@@ -2769,11 +2774,11 @@ export function ExperimentalPlayerHost({
     // remplace aussi sa mesure : c'est le dernier geste qui compte.
     const element = videoElRef.current;
     // Les plages autour de la cible, pour la ligne du journal — voir `describeBufferedAround`.
-    const { buffered, ranges } = describeBufferedAround(element?.buffered ?? null, seconds);
+    const { buffered, ranges, beforeStartS } = describeBufferedAround(element?.buffered ?? null, seconds);
     // Le saut remplacé d'abord, puis la nouvelle mesure : son départ ne compte pas le temps d'écrire
     // la ligne du précédent.
     reportUnarrivedSeek(seeks.takeMeasure(), element?.currentTime ?? positionRef.current, element?.seeking ?? false);
-    seeks.startMeasure({ from: positionRef.current, to: seconds, startedAt: Date.now(), hiddenAtStart: tally.hiddenMsSoFar(Date.now()), buffered, ranges });
+    seeks.startMeasure({ from: positionRef.current, to: seconds, startedAt: Date.now(), hiddenAtStart: tally.hiddenMsSoFar(Date.now()), buffered, ranges, beforeStartS });
   };
 
   /** Un changement de piste audio — les commandes et le banc d'essai, par le même chemin. */

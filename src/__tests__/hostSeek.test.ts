@@ -12,6 +12,7 @@ const timing = (to: number, over: Partial<SeekTiming> = {}): SeekTiming => ({
   hiddenAtStart: 0,
   buffered: false,
   ranges: "vide",
+  beforeStartS: null,
   ...over,
 });
 
@@ -117,11 +118,22 @@ describe("le tampon autour d'une cible", () => {
     expect(describeBufferedAround(ranges([0, 10], [100, 130], [500, 520], [600, 640], [2000, 2010]), 610)).toEqual({
       buffered: true,
       ranges: "0.0–10.0 · 100.0–130.0 · 500.0–520.0 · 600.0–640.0",
+      beforeStartS: null,
     });
   });
 
+  it("hors du tampon, dit de combien la cible précède le début de la plage qui la suit", () => {
+    expect(describeBufferedAround(ranges([0, 10], [1000.2, 1035]), 995)).toEqual({
+      buffered: false,
+      ranges: "0.0–10.0 · 1000.2–1035.0",
+      beforeStartS: 5.2,
+    });
+    // Après tout ce qui est chargé : aucune plage à suivre.
+    expect(describeBufferedAround(ranges([0, 10]), 20).beforeStartS).toBeNull();
+  });
+
   it("vide, ou rien du tout", () => {
-    expect(describeBufferedAround(ranges(), 10)).toEqual({ buffered: false, ranges: "vide" });
-    expect(describeBufferedAround(null, 10)).toEqual({ buffered: false, ranges: "vide" });
+    expect(describeBufferedAround(ranges(), 10)).toEqual({ buffered: false, ranges: "vide", beforeStartS: null });
+    expect(describeBufferedAround(null, 10)).toEqual({ buffered: false, ranges: "vide", beforeStartS: null });
   });
 });

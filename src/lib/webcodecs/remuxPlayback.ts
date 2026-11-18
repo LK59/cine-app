@@ -17,6 +17,7 @@ import { forgetMediaHeader, mediaHeaderKey, openMediaFile } from "./mediaFile";
 import { MseSource, type RecoveryFacts, type UnreadableZoneEvent } from "./mseSource";
 import { choosePlaybackPath, NATIVE_PATH, type ChosenPath } from "./pathSelector";
 import type { AudioLeadGap } from "./audioLeadGap";
+import type { SeekServed } from "./mseTypes";
 import { Remuxer, playableAudio, deliveredAudio, primeAudioDelivery, audioDelivery, dialogueCanShape, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
@@ -606,6 +607,11 @@ export class RemuxPlayback {
 
   get lost(): boolean {
     return this.mse?.lost ?? false;
+  }
+
+  /** Voir `MseSource.seekPathFor` : comment le saut vers cette cible a été servi, pour la ligne `seek`. */
+  seekPathFor(target: number): SeekServed | null {
+    return this.mse?.seekPathFor(target) ?? null;
   }
 
   /** Voir `MseSource.nextKeyframeAfter` : où rouvrir au-delà d'un passage qui a tué la source deux fois. */

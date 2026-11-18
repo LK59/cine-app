@@ -228,3 +228,19 @@ export const ZONE_MARGIN_SECONDS = 0.5;
  * ce qui est chargé et être posé dessus plutôt que tout relire — voir `MseSource.onSeeking`.
  */
 export const ONE_FRAME_S = 1 / 24;
+
+/**
+ * Un saut qui tombe avant le début du chargé, à au plus cette part de l'avance visée : le chargé est
+ * gardé et seul ce qui manque est lu devant lui (`MseSource.performSeek`, 18/11/2026). La moitié,
+ * pour qu'un ajout devant — l'écart, plus le premier groupe d'images du chargé qu'il relit pour s'y
+ * raccorder — ne lise jamais plus que le saut ordinaire, qui relit toute l'avance. Les « −10 s » qui
+ * retombent juste avant l'image clé d'arrivée d'un saut la manquent de cinq secondes environ.
+ */
+export const PREPEND_SHARE_OF_AHEAD = 0.5;
+
+/**
+ * Où s'arrête la lecture d'un ajout devant, après le début du chargé : à la première image clé qui
+ * suit ce début d'au moins une demi-seconde — jamais celle qui l'ouvre, que le début mesuré peut
+ * précéder de quelques images (RASL) ou suivre d'un arrondi.
+ */
+export const PREPEND_STOP_MARGIN_S = 0.5;

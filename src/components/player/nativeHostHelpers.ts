@@ -6,6 +6,7 @@ import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
 import { takeAacDecodeRoute, takeTrueHdThread } from "@/lib/webcodecs/softwareAudio";
 import { audioLeadGapFields, type AudioLeadGap } from "@/lib/webcodecs/audioLeadGap";
 import type { SeekTiming } from "@/lib/hostSeek";
+import type { SeekServed } from "@/lib/webcodecs/mseTypes";
 import { seekElapsed } from "@/components/player/session/seekElapsed";
 import { traceRecent } from "@/lib/webcodecs/trace";
 import { normaliseLanguage, toJellyfinLanguage, trackLanguage } from "@/lib/trackPreferences";
@@ -295,13 +296,27 @@ export { seekElapsed };
  * pour le geste qui l'a lancée. Un saut arrière suivi d'un blocage (22/09/2026) ne laissait au
  * journal que « de 176 à 166 en 900 ms », sans rien de ce qui l'avait servi.
  */
-export function seekLineFields(tally: SessionTally, timing: SeekTiming, between: Record<string, unknown> = {}): Record<string, unknown> {
+//
+// `seekPath`, `beforeStartS`, `keptS` (18/11/2026) : de quoi classer chaque saut — servi dans le tampon
+// (`mémoire`), en ajoutant devant le chargé gardé (`devant`, avec les secondes d'avance gardées), ou
+// en vidant tout (`complet`) — et, hors du tampon, à quelle distance du début du chargé tombait la
+// cible. Sans `seekPath` quand la source ne l'a pas servi (remplacé avant, ou refusé). Pas de
+// `beforeStartS` sans plage après la cible : le journal n'écrit pas `null` (`clean`).
+export function seekLineFields(
+  tally: SessionTally,
+  timing: SeekTiming,
+  between: Record<string, unknown> = {},
+  served: SeekServed | null = null
+): Record<string, unknown> {
   return {
     path: "remux",
     from: Math.round(timing.from),
     to: Math.round(timing.to),
     buffered: timing.buffered,
     ranges: timing.ranges,
+    ...(served ? { seekPath: served.path } : {}),
+    ...(timing.beforeStartS !== null && timing.beforeStartS !== undefined ? { beforeStartS: timing.beforeStartS } : {}),
+    ...(served?.keptS !== null && served?.keptS !== undefined ? { keptS: served.keptS } : {}),
     ...between,
     tookMs: seekElapsed(tally, timing),
     steps: traceRecent(Date.now() - timing.startedAt + 500).join(" | "),

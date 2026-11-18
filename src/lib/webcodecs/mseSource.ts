@@ -26,6 +26,7 @@ import {
   NETWORK_TRIM_MARGIN_SECONDS, NETWORK_OUTAGE_GIVE_UP_MS, OUTAGE_STARVED_LEAD_SECONDS, STALL_TIMEOUT_MS, WATCHDOG_MS,
   EVICTION_REFILLS_PER_MINUTE, SOURCE_OPEN_TIMEOUT_MS, MISPLACED_SECONDS, FRUITLESS_APPENDS, PRE_ROLL_SECONDS,
   TRACED_APPENDS, TRACED_APPENDS_PER_SEEK, KEEP_BEHIND_SECONDS, TRIM_SLACK_SECONDS, KEYFRAME_TRIM_MARGIN, NEXT_KEYFRAME_MARGIN,
+  PREPEND_SHARE_OF_AHEAD, PREPEND_STOP_MARGIN_S,
 } from "./mseTuning";
 import { frameQuality, playableSpans, spansAll, spansNear } from "./mseSpans";
 import { LossRecord, type SentFragment } from "./mseLossRecord";
@@ -34,7 +35,7 @@ import { BufferPlanner } from "./mseBufferPlanner";
 import { RecoveryLadder } from "./mseRecoveryLadder";
 import { FrozenClockWatch } from "./mseFrozenClock";
 import { OpeningStartHold } from "./mseStartHold";
-import type { MseCallbacks, RecoveryFacts } from "./mseTypes";
+import type { MseCallbacks, RecoveryFacts, SeekServed } from "./mseTypes";
 import type { BufferBudget, ByteRate } from "./bufferBudget";
 
 // Kept exported from here as well: every caller of these already reaches for this module, and
@@ -92,6 +93,8 @@ export class MseSource {
   private pending: Promise<void> = Promise.resolve();
   /** Le saut : demandé, servi, en route, arrivé — voir `SeekLifecycle`. */
   private readonly seekState = new SeekLifecycle();
+  /** Le dernier saut servi et comment — voir `seekPathFor`. */
+  private lastServed: SeekServed | null = null;
   /** La dernière position où l'élément jouait sans sauter — où revenir d'un saut refusé. */
   private lastPlayedAt = 0;
   private delaySeconds = 0;
@@ -594,6 +597,16 @@ export class MseSource {
     }
   }
 
+  /**
+   * Comment le saut vers `target` a été servi — `mémoire`, `devant` ou `complet` —, ou null : servi
+   * pour une autre cible (un geste plus récent, ou celui-ci pas encore servi), ou refusé. Pour la
+   * ligne `seek` ; ne lève jamais.
+   */
+  seekPathFor(target: number): SeekServed | null {
+    const served = this.lastServed;
+    return served && Math.abs(served.target - target) < 0.05 ? served : null;
+  }
+
   /** Voir `LossRecord.lossReport`. */
   lossReport(): Record<string, unknown> {
     return this.loss.lossReport();
@@ -619,7 +632,10 @@ export class MseSource {
     // et ce geste-ci, le dernier, disparaissait dessous. Un doigt qui repasse sur une zone encore
     // chargée pendant une rafale se retrouvait ramené à l'avant-dernière position (trouvé par le
     // fuzz le 24/09/2026, graine 30054481). Par la voie normale, le dernier geste l'emporte.
-    if (this.isBufferedAt(target) && this.seekState.requested === null) return void this.fill();
+    if (this.isBufferedAt(target) && this.seekState.requested === null) {
+      this.lastServed = { target, path: "mémoire", keptS: null };
+      return void this.fill();
+    }
     // À moins d'une image avant le début de ce qui est chargé : la tête est posée sur ce début plutôt
     // que de tout relire (28/10/2026). Après un saut, la zone chargée commence à l'image clé de son
     // arrivée, et un « −10 s » qui retombe dessus la manquait de quelques millisecondes — l'audio
@@ -631,6 +647,7 @@ export class MseSource {
       const edge = startJustAfter(this.playable, target, ONE_FRAME_S);
       if (edge !== null) {
         trace(`saut à ${Math.round((edge - target) * 1000)} ms du chargé — posé sur son début (${edge.toFixed(2)} s)`);
+        this.lastServed = { target, path: "mémoire", keptS: null };
         this.video.currentTime = edge;
         return;
       }
@@ -784,7 +801,11 @@ export class MseSource {
     try {
       while (!this.destroyed && this.generation === generation) {
         const lead = this.lead;
-        if (lead >= this.aheadTarget) break;
+        // Sauf pendant un ajout devant (`performSeek`) : l'avance gardée remplit la cible dès que
+        // l'ajout touche le chargé, mais le groupe d'images qui l'ouvre reste à relire jusqu'à la
+        // borne — sans quoi le raccord, et la licence d'atterrissage qui l'attend, n'arriveraient
+        // qu'une fois l'avance consommée. Borné : l'écart et un groupe d'images.
+        if (lead >= this.aheadTarget && !this.remuxer.stopAhead) break;
         // Above the floor the system's word is final; below it, the media is needed to play at
         // all and a refusal would strand the player with an empty buffer and a spinner.
         if (lead >= MIN_BUFFER_SECONDS && !this.streamingWanted) break;
@@ -796,6 +817,12 @@ export class MseSource {
         const segment = await this.remuxer.nextSegment();
         diagInterval("segment", builtFrom);
         if (this.generation !== generation || this.destroyed || this.networkGaveUp) break;
+        // La borne d'un ajout devant (`performSeek`), pas la fin du fichier : la suite est déjà là.
+        // D'ordinaire vue avec le dernier segment, plus bas ; ici, une borne trouvée sans rien avant.
+        if (!segment && this.remuxer.stoppedShort) {
+          this.joinKept();
+          continue;
+        }
         if (this.appendsTraced < TRACED_APPENDS) {
           this.appendsTraced++;
           trace(
@@ -906,6 +933,10 @@ export class MseSource {
           if (segment.audio) this.audioRate.record(segment.audio.byteLength, covered);
         }
         this.readUpTo = segment.endSeconds;
+        // Le dernier segment d'un ajout devant : le remultiplexeur a fermé son groupe sur la borne. Le
+        // raccord se fait tout de suite, pas au prochain tour — l'avance gardée remplit déjà la cible,
+        // et la boucle s'arrêterait avant de le demander.
+        if (this.remuxer.stoppedShort) this.joinKept();
         this.trimBehind();
         // Avant le reste : tant que la tête n'est pas posée, il n'y a ni atterrissage à faire ni
         // démarrage à réclamer.
@@ -1492,35 +1523,66 @@ export class MseSource {
     const latest = this.seekState.requested;
     if (latest !== null && latest !== requested) return this.performSeek(latest);
 
-    // No abort() here any more. Cancelling an operation mid-flight leaves the buffer's parser in
-    // a state the next append has to be careful about, and the queue already guarantees that
-    // whatever was running has finished before this removal starts.
-    // Chronométré piste par piste, de la demande à son `updateend` : la preuve au journal que le
-    // vidage a eu lieu et ce qu'il a laissé, au lieu de la déduire du code (14/10/2026).
-    // Les deux tampons en même temps : chacun a sa file et son `updating`, rien ne lie leurs
-    // retraits. L'un après l'autre, un saut attendait la somme — « vidéo 119 ms, audio 68 ms »
-    // sur un iPhone, 187 ms avant le premier octet du nouveau média (journal relu le 20/10/2026).
-    const clearFrom = Date.now();
-    const clearMs = (
-      await Promise.all(
-        [this.videoOps, this.audioOps].map(async (queue) => {
-          if (!queue) return null;
-          await this.clear(queue);
-          return `${queue === this.videoOps ? "vidéo" : "audio"} ${Date.now() - clearFrom} ms`;
-        })
-      )
-    ).filter((entry): entry is string => entry !== null);
-    if (this.destroyed) return;
-    try {
-      trace(
-        `vidage fait (${clearMs.join(", ")}) — reste vidéo ${spansAll(this.videoBuffer)} · audio ${spansAll(this.audioBuffer)}`
-      );
-    } catch {
-      /* rien */
+    // Juste avant le chargé : on le garde, et seul ce qui manque est lu devant lui (18/11/2026).
+    // Après une ouverture ou un saut, le chargé commence à l'image clé d'arrivée, et un « −10 s »
+    // la manque d'environ cinq secondes : 79 des 210 sauts hors du chargé relevés du 11 au 18/11,
+    // qui vidaient tout — les trente secondes d'avance comprises — pour relire les mêmes octets
+    // (323 ms médians en 1080p sur iPhone, 776 ms en 4K, 1,4 s en 4K sur Mac ; *Drive*, de 1947 à
+    // 1937 s, 10,2 s). La tête va bien à la cible demandée, pas à une image clé.
+    const kept = this.keptAfter(playerSeconds);
+    this.lastServed = {
+      target: requested,
+      path: kept ? "devant" : "complet",
+      keptS: kept ? Math.round((Math.min(kept.end, kept.keepUntil) - kept.start) * 10) / 10 : null,
+    };
+    if (kept) {
+      // L'avance gardée ne dépasse pas celle d'un saut ordinaire : elle courait depuis la tête
+      // d'avant, plus loin, et le budget en octets de WebKit (105 Mo par tampon sur iPhone) ne
+      // tiendrait pas l'écart en plus — WebKit retirerait alors lui-même, devant la tête aussi.
+      if (kept.end > kept.keepUntil) {
+        await Promise.all([this.videoOps, this.audioOps].map((queue) => (queue ? this.clearFrom(queue, kept.keepUntil) : null)));
+        if (this.destroyed) return;
+      }
+      try {
+        trace(
+          `ajout devant : la cible est à ${(kept.start - playerSeconds).toFixed(2)} s du chargé, gardé — reste vidéo ` +
+            `${spansAll(this.videoBuffer)} · audio ${spansAll(this.audioBuffer)} ; lecture de l'image clé d'avant la cible jusqu'à ce début`
+        );
+      } catch {
+        /* rien */
+      }
+      this.fragmentsSinceSeek = 0;
+    } else {
+      // No abort() here any more. Cancelling an operation mid-flight leaves the buffer's parser in
+      // a state the next append has to be careful about, and the queue already guarantees that
+      // whatever was running has finished before this removal starts.
+      // Chronométré piste par piste, de la demande à son `updateend` : la preuve au journal que le
+      // vidage a eu lieu et ce qu'il a laissé, au lieu de la déduire du code (14/10/2026).
+      // Les deux tampons en même temps : chacun a sa file et son `updating`, rien ne lie leurs
+      // retraits. L'un après l'autre, un saut attendait la somme — « vidéo 119 ms, audio 68 ms »
+      // sur un iPhone, 187 ms avant le premier octet du nouveau média (journal relu le 20/10/2026).
+      const clearFrom = Date.now();
+      const clearMs = (
+        await Promise.all(
+          [this.videoOps, this.audioOps].map(async (queue) => {
+            if (!queue) return null;
+            await this.clear(queue);
+            return `${queue === this.videoOps ? "vidéo" : "audio"} ${Date.now() - clearFrom} ms`;
+          })
+        )
+      ).filter((entry): entry is string => entry !== null);
+      if (this.destroyed) return;
+      try {
+        trace(
+          `vidage fait (${clearMs.join(", ")}) — reste vidéo ${spansAll(this.videoBuffer)} · audio ${spansAll(this.audioBuffer)}`
+        );
+      } catch {
+        /* rien */
+      }
+      // Ce qui a été envoyé avant ce vidage n'est plus dans les tampons.
+      this.sentFragments = [];
+      this.fragmentsSinceSeek = 0;
     }
-    // Ce qui a été envoyé avant ce vidage n'est plus dans les tampons.
-    this.sentFragments = [];
-    this.fragmentsSinceSeek = 0;
     // La même question après le vidage, qui attend lui aussi le navigateur — des centaines de
     // millisecondes sur un appareil lent. Un geste arrivé pendant ce temps était écrasé : la tête,
     // que le spectateur venait de poser, repartait sur la cible abandonnée. Le saut suivant la
@@ -1534,13 +1596,21 @@ export class MseSource {
     // média : « −10 s » depuis 62 s, avec un tampon qui commençait à 60,2 s, devenait 60,2 s. La
     // suite du saut réécrivait 52 s d'ordinaire ; une reconstruction dans l'intervalle (un
     // changement de piste) repartait de 60 s (fuzz du 24/09/2026, graine 10133935).
-    this.guard.seekServed(playerSeconds);
+    // Pour un ajout devant, accordée seulement une fois le raccord fait (`joinKept`) : avant, le
+    // premier média après la cible est le chargé gardé, et la tête y aurait été posée — le « −10 s »
+    // devenait un « −5 s ».
+    if (!kept) this.guard.seekServed(playerSeconds);
     // Les tampons viennent d'être vidés et le lecteur va être repositionné : plus rien à retirer
     // ni à retenir pour une coupure gardée plus tôt.
     this.trimBeforeNextAppend = false;
     this.networkHold = false;
 
-    this.remuxer.seekTo(this.toFileClock(playerSeconds));
+    // Un ajout devant s'arrête à l'image clé qui suit le début du chargé : il relit le premier groupe
+    // d'images du chargé, qui remplace le sien à l'identique. S'arrêter sur le début même laisserait
+    // un trou — une reprise sur une image clé CRA en écarte les images RASL (`isRaslPicture`), qui se
+    // montrent juste avant elle — que le groupe relu, lui, comble.
+    if (kept) this.remuxer.seekTo(this.toFileClock(playerSeconds), this.toFileClock(kept.start) + PREPEND_STOP_MARGIN_S);
+    else this.remuxer.seekTo(this.toFileClock(playerSeconds));
     this.seekNetworkPending = true;
     this.appendsSinceSeek = 0;
     // Only when the element is not already there: reassigning would fire another seeking event
@@ -1567,6 +1637,50 @@ export class MseSource {
     // seconds of media to be fetched before admitting so means the next seek queues behind a
     // download of a place the viewer has already left.
     void this.fill();
+  }
+
+  /**
+   * Le chargé qu'un saut vers `target` peut garder : la plage jouable qui commence après la cible, à
+   * au plus `PREPEND_SHARE_OF_AHEAD` de l'avance visée — ou null, et le saut vide tout comme avant.
+   * `keepUntil` : jusqu'où la garder, l'avance d'un saut ordinaire depuis la cible.
+   */
+  private keptAfter(target: number): { start: number; end: number; keepUntil: number } | null {
+    const ranges = this.playable;
+    if (rangeAround(ranges, target, 0) >= 0) return null;
+    let start = Infinity;
+    let end = 0;
+    for (let i = 0; i < ranges.length; i++) {
+      if (ranges.start(i) > target && ranges.start(i) < start) {
+        start = ranges.start(i);
+        end = ranges.end(i);
+      }
+    }
+    if (!Number.isFinite(start)) return null;
+    const ahead = this.aheadTarget;
+    if (start - target > ahead * PREPEND_SHARE_OF_AHEAD) return null;
+    return { start, end, keepUntil: target + ahead };
+  }
+
+  /**
+   * L'ajout devant est arrivé à sa borne : ce qu'il a lu rejoint le chargé gardé, et la lecture
+   * reprend au bout de celui-ci — comme après une éviction (`refillEvicted`) : le groupe qui contient
+   * ce bout est retiré puis relu d'un seul tenant (`trimBeforeNextAppend`).
+   *
+   * Si le raccord n'a pas pris (un trou subsiste), le bout est celui de l'ajout, et cette même
+   * relecture retire le chargé gardé pour le relire : le saut ordinaire, en un peu plus long. Et si
+   * la tête n'est encore sur rien, le groupe relu commence sous elle : la reprise habituelle.
+   */
+  private joinKept(): void {
+    const join = this.bufferedEnd();
+    trace(
+      `ajout devant fait : vidéo ${spansNear(this.videoBuffer, this.anchor)} · audio ` +
+        `${this.audioBuffer ? spansNear(this.audioBuffer, this.anchor) : "aucun"} — lecture reprise à ${join.toFixed(1)} s`
+    );
+    // La licence d'atterrissage retenue par `performSeek` : le média de ce saut est maintenant là.
+    this.guard.seekServed(this.video.currentTime);
+    this.remuxer.seekTo(this.toFileClock(join));
+    this.readUpTo = this.toFileClock(join);
+    this.trimBeforeNextAppend = true;
   }
 
   /**

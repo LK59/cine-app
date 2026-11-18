@@ -67,3 +67,14 @@ export interface MseCallbacks {
    */
   onStall?: (facts: Record<string, unknown>) => void;
 }
+
+/**
+ * Comment la source a servi un saut, pour la ligne `seek` (18/11/2026) : `mémoire` — la cible était
+ * chargée (ou à moins d'une image avant) ; `devant` — le chargé qui la suit est gardé et seul ce qui
+ * manque est lu devant lui, `keptS` secondes d'avance gardées ; `complet` — tout vidé et relu.
+ */
+export interface SeekServed {
+  target: number;
+  path: "mémoire" | "devant" | "complet";
+  keptS: number | null;
+}

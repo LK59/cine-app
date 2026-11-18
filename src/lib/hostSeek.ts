@@ -24,6 +24,12 @@ export interface SeekTiming {
   buffered: boolean;
   /** Les plages en tampon les plus proches de la cible, écrites court. */
   ranges: string;
+  /**
+   * Hors du tampon : de combien la cible précède le début de la plage qui la suit, au dixième — ou
+   * null, sans plage après elle (et dans le tampon). Ce qui situe un saut « devant » ou « complet »
+   * (`MseSource.seekPathFor`) : à écart égal, les sauts d'avant le 18/11/2026 et ceux d'après.
+   */
+  beforeStartS: number | null;
 }
 
 export class HostSeek {
@@ -147,13 +153,18 @@ export function seekDuration(timing: Pick<SeekTiming, "startedAt" | "hiddenAtSta
  * `buffered` ont trouvé leur cible vide 0,7 s plus tard, et la ligne ne permettait pas de dire ce
  * qu'il y avait autour. Les quatre plus proches de la cible, écrites court.
  */
-export function describeBufferedAround(buffered: { length: number; start(i: number): number; end(i: number): number } | null, seconds: number): { buffered: boolean; ranges: string } {
+export function describeBufferedAround(
+  buffered: { length: number; start(i: number): number; end(i: number): number } | null,
+  seconds: number
+): { buffered: boolean; ranges: string; beforeStartS: number | null } {
   let inside = false;
+  let nextStart = Infinity;
   const near: [number, number][] = [];
   for (let i = 0; buffered && i < buffered.length; i++) {
     const start = buffered.start(i);
     const end = buffered.end(i);
     if (start <= seconds && seconds < end) inside = true;
+    if (start > seconds) nextStart = Math.min(nextStart, start);
     near.push([start, end]);
   }
   const ranges =
@@ -163,5 +174,6 @@ export function describeBufferedAround(buffered: { length: number; start(i: numb
       .sort((a, b) => a[0] - b[0])
       .map(([start, end]) => `${start.toFixed(1)}–${end.toFixed(1)}`)
       .join(" · ") || "vide";
-  return { buffered: inside, ranges };
+  const beforeStartS = inside || !Number.isFinite(nextStart) ? null : Math.round((nextStart - seconds) * 10) / 10;
+  return { buffered: inside, ranges, beforeStartS };
 }

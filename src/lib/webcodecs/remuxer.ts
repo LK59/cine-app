@@ -825,6 +825,12 @@ export class Remuxer {
   private clampedSamples = 0;
   private sequence = 1;
   private done = false;
+  /**
+   * Où une lecture bornée s'arrête (horloge du fichier, µs) : juste avant la première image clé à
+   * cet instant ou après — voir `seekTo`. Null : jusqu'à la fin du fichier.
+   */
+  private stopAtUs: number | null = null;
+  private stopReached = false;
 
   private constructor(
     private readonly file: MatroskaFile,
@@ -1113,7 +1119,15 @@ export class Remuxer {
    * @param seconds a time on the *source's* clock. A caller working from the player's clock has
    *   to subtract `presentationDelaySeconds` first.
    */
-  seekTo(seconds: number): void {
+  seekTo(seconds: number, stopAt: number | null = null): void {
+    // La borne d'un ajout devant ce qui est déjà chargé (`MseSource.performSeek`) : la lecture
+    // s'arrête net avant la première image clé à `stopAt` ou après, et `nextSegment` répond alors
+    // null comme à la fin du fichier — `stoppedShort` dit lequel des deux. Sur une image clé, et
+    // jamais au milieu d'un groupe : un groupe envoyé à moitié par-dessus le média gardé en
+    // retirerait le reste (la norme MSE retire, avec une image recouverte, tout ce qui en dépend
+    // jusqu'à l'image clé suivante), et laisserait un trou.
+    this.stopAtUs = stopAt === null ? null : Math.round(stopAt * 1e6);
+    this.stopReached = false;
     const from = this.offsetFor(seconds);
     this.reader.seekTo(from);
     // Asked for now rather than when the parser gets there. The index has just said where this
@@ -1146,6 +1160,20 @@ export class Remuxer {
     // Decode times restart at the seek point so the segments land where the player expects them,
     // rather than continuing a timeline that no longer matches the media.
     this.videoDecodeTime = Math.round(seconds * TIMESCALE);
+  }
+
+  /**
+   * La lecture bornée par `seekTo` a atteint sa borne : le segment qui vient d'être rendu était le
+   * dernier (le groupe se ferme en lisant l'image clé de la borne), et `nextSegment` répond ensuite
+   * null — ce null-là n'est pas la fin du fichier.
+   */
+  get stoppedShort(): boolean {
+    return this.stopReached;
+  }
+
+  /** Une lecture bornée par `seekTo` qui n'a pas encore atteint sa borne. */
+  get stopAhead(): boolean {
+    return this.stopAtUs !== null && !this.stopReached;
   }
 
   /** Où la lecture reprendra pour ce temps (horloge du fichier) : le cluster que l'index désigne. */
@@ -1294,6 +1322,14 @@ export class Remuxer {
           this.dropLeading = true;
           this.leadingDropped = 0;
         }
+        // La borne d'une lecture bornée : cette image clé et ce qui la suit sont déjà dans le tampon.
+        // Testée avant la fermeture ordinaire d'un groupe, qui garderait cette image pour le suivant.
+        if (this.stopAtUs !== null && sample.timestampUs >= this.stopAtUs && this.startsHere(sample)) {
+          this.stopReached = true;
+          this.done = true;
+          this.groupClosed = true;
+          break;
+        }
         const span = this.pendingVideo.length > 0 ? sample.timestampUs - this.pendingVideo[0].timestampUs : 0;
         if (this.startsHere(sample) && span >= SEGMENT_US) {
           this.boundary = sample;
@@ -1316,7 +1352,8 @@ export class Remuxer {
     // générique de chaque film au son ré-encodé (DTS et AC-3 sur Chrome ; DTS, TrueHD, FLAC et
     // Opus sur iPhone).
     const spent = this.emitted >= this.pendingVideo.length && this.pendingAudio.length === 0;
-    const soundSpent = !this.transcoder || this.tailDone || this.transcoder.drained === true;
+    // Une lecture bornée n'a pas de fin de son à rendre : ce qui suit la borne est déjà là.
+    const soundSpent = !this.transcoder || this.tailDone || this.transcoder.drained === true || this.stopReached;
     return !(this.done && spent && soundSpent);
   }
 
