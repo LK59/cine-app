@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sonarr } from "@/lib/clients/sonarr";
 import { bazarr } from "@/lib/clients/bazarr";
 import { createTmdbClient, pickTrailer } from "@/lib/clients/tmdb";
 import { seriesTmdbFacts } from "@/lib/titleInfoShape";
@@ -7,6 +6,8 @@ import { jellyfinOnlyInfo } from "@/lib/jellyfinOnlyInfo";
 import { getTmdbLocale, localeOf } from "@/lib/i18n";
 import { cachedOmdbRating, cachedSonarrQueue, cachedTmdbIdForTvdb, cachedTmdbTvInfo, hiddenFromCaller } from "@/lib/titleInfoCache";
 import { getTitleLogoFor } from "@/lib/title-logo";
+import { cachedSeries } from "@/lib/server-cache";
+import { upstreamFailure } from "@/lib/upstreamResponse";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -16,7 +17,15 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   // Une série que Jellyfin a seule (DECISIONS.md §89) : rien à demander à Sonarr ni à Bazarr.
   const onlyInJellyfin = await jellyfinOnlyInfo(req, "series", id);
   if (onlyInJellyfin) return onlyInJellyfin;
-  const series = await sonarr.getSeriesById(id).catch(() => null);
+  // La série telle que la liste gardée au chaud la connaît (`cachedSeries`) plutôt qu'un appel à
+  // Sonarr par fiche et par survol, et une panne de Sonarr nommée (502) plutôt qu'un 404 — même
+  // décision que la route des films, voir son commentaire (18/11/2026).
+  let series;
+  try {
+    series = (await cachedSeries()).find((s) => s.id === id) ?? null;
+  } catch (err) {
+    return upstreamFailure(err, "sonarr-info");
+  }
   if (!series) return NextResponse.json({ error: "Série introuvable" }, { status: 404 });
   // Cachée par les tags bloqués du compte : elle n'existe pas pour lui (DECISIONS.md §54).
   if (series.tmdbId && (await hiddenFromCaller(req, `series:${series.tmdbId}`))) {

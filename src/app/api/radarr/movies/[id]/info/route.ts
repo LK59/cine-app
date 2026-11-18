@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { radarr } from "@/lib/clients/radarr";
 import { bazarr } from "@/lib/clients/bazarr";
 import { createTmdbClient, pickTrailer } from "@/lib/clients/tmdb";
 import { movieTmdbFacts } from "@/lib/titleInfoShape";
@@ -7,6 +6,8 @@ import { jellyfinOnlyInfo } from "@/lib/jellyfinOnlyInfo";
 import { getTmdbLocale, localeOf } from "@/lib/i18n";
 import { cachedOmdbRating, cachedRadarrQueue, cachedTmdbMovieInfo, hiddenFromCaller } from "@/lib/titleInfoCache";
 import { getTitleLogoFor } from "@/lib/title-logo";
+import { cachedMovies } from "@/lib/server-cache";
+import { upstreamFailure } from "@/lib/upstreamResponse";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -16,7 +17,21 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   // Un film que Jellyfin a seul (DECISIONS.md §89) : rien à demander à Radarr ni à Bazarr.
   const onlyInJellyfin = await jellyfinOnlyInfo(req, "movie", id);
   if (onlyInJellyfin) return onlyInJellyfin;
-  const movie = await radarr.getMovie(id).catch(() => null);
+  /**
+   * Le film tel que la liste gardée au chaud le connaît (`cachedMovies`, chasse de nuit du 18/11/2026) —
+   * celle dont le catalogue est fait, donc tout titre qu'une fiche peut ouvrir. La route demandait
+   * `/movie/{id}` à Radarr à chaque fiche ouverte et à chaque survol préchargé (27 à 170 ms mesurés),
+   * pour n'en lire que `tmdbId` et `imdbId`. Et Radarr injoignable répondait « Film introuvable » en
+   * 404 : la fiche perdait ses détails TMDB pourtant gardés en cache, et chaque survol d'une grille
+   * ajoutait un 404 distinct — ce que le pare-feu compte pour bannir une adresse (CLAUDE.md, CrowdSec).
+   * La liste garde sa dernière copie pendant une panne ; sans copie du tout, l'échec se nomme (502).
+   */
+  let movie;
+  try {
+    movie = (await cachedMovies()).find((m) => m.id === id) ?? null;
+  } catch (err) {
+    return upstreamFailure(err, "radarr-info");
+  }
   if (!movie) return NextResponse.json({ error: "Film introuvable" }, { status: 404 });
   // Caché par les tags bloqués du compte : il n'existe pas pour lui (DECISIONS.md §54).
   if (movie.tmdbId && (await hiddenFromCaller(req, `movie:${movie.tmdbId}`))) {

@@ -53,14 +53,14 @@ beforeEach(() => {
 
 describe("GET /api/sonarr/series/[id]/info", () => {
   it("returns 404 when the series doesn't exist in Sonarr", async () => {
-    mockSonarr.getSeriesById.mockRejectedValue(new Error("nope"));
+    mockCachedSeries.mockResolvedValue([{ id: 2, tvdbId: 7 }]);
     const { GET } = await import("@/app/api/sonarr/series/[id]/info/route");
     const res = await GET(fakeReq(), params("1"));
     expect(res.status).toBe(404);
   });
 
   it("resolves the TMDB TV id from the series' TVDB id before fetching TMDB details", async () => {
-    mockSonarr.getSeriesById.mockResolvedValue({ id: 1, tvdbId: 555, imdbId: null });
+    mockCachedSeries.mockResolvedValue([{ id: 1, tvdbId: 555, imdbId: null }]);
     const { GET } = await import("@/app/api/sonarr/series/[id]/info/route");
     await GET(fakeReq(), params("1"));
     expect(mockTmdb.findTvByTvdbId).toHaveBeenCalledWith(555);
@@ -68,7 +68,7 @@ describe("GET /api/sonarr/series/[id]/info", () => {
   });
 
   it("skips TMDB detail calls entirely when the TVDB->TMDB lookup finds nothing", async () => {
-    mockSonarr.getSeriesById.mockResolvedValue({ id: 1, tvdbId: 555, imdbId: null });
+    mockCachedSeries.mockResolvedValue([{ id: 1, tvdbId: 555, imdbId: null }]);
     mockTmdb.findTvByTvdbId.mockResolvedValue({ tv_results: [] });
     const { GET } = await import("@/app/api/sonarr/series/[id]/info/route");
     const res = await GET(fakeReq(), params("1"));
@@ -78,7 +78,7 @@ describe("GET /api/sonarr/series/[id]/info", () => {
   });
 
   it("filters queue records to only this series' active downloads", async () => {
-    mockSonarr.getSeriesById.mockResolvedValue({ id: 1, tvdbId: 555, imdbId: null });
+    mockCachedSeries.mockResolvedValue([{ id: 1, tvdbId: 555, imdbId: null }]);
     mockSonarr.getQueue.mockResolvedValue({
       records: [
         { seriesId: 1, episodeId: 10, title: "Ep1", status: "downloading" },
@@ -90,6 +90,14 @@ describe("GET /api/sonarr/series/[id]/info", () => {
     const body = await res.json();
     expect(body.activeDownloads).toHaveLength(1);
     expect(body.activeDownloads[0].episodeId).toBe(10);
+  });
+  // 18/11/2026 : même décision que la fiche d'un film — la liste gardée au chaud, et une panne nommée.
+  it("names a Sonarr outage (502) instead of answering « not found », without asking Sonarr", async () => {
+    mockCachedSeries.mockRejectedValue(new Error("sonarr ne répond pas"));
+    const { GET } = await import("@/app/api/sonarr/series/[id]/info/route");
+    const res = await GET(fakeReq(), params("1"));
+    expect(res.status).toBe(502);
+    expect(mockSonarr.getSeriesById).not.toHaveBeenCalled();
   });
 });
 
