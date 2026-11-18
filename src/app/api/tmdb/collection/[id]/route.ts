@@ -26,8 +26,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
     const movieByTmdb = new Map(movies.map((m) => [m.tmdbId, m.id]));
 
+    // Un épisode sans date (annoncé, pas encore daté) va à la fin, pas en tête : la chaîne vide
+    // passait avant toutes les dates, et la saga d'« Insaisissables 3 » commençait par « Untitled
+    // Fourth Now You See Me Film », avant le 1 et le 2 (relevé le 18/11/2026).
     const parts = [...collection.parts]
-      .sort((a, b) => (a.release_date ?? "").localeCompare(b.release_date ?? ""))
+      .sort((a, b) => (a.release_date ? (b.release_date ? a.release_date.localeCompare(b.release_date) : -1) : b.release_date ? 1 : 0))
       .map((p) => {
         const libraryId = movieByTmdb.get(p.id);
         return {
