@@ -20,7 +20,18 @@ const captured: AudioDecoderClass[] = [];
 
 /** Enregistre par `register` (l'appel de l'extension), en notant au passage la classe enregistrée. */
 export function registerCapturing(core: Core, register: () => void): void {
-  const base = core.CustomAudioDecoder as unknown as Record<symbol, unknown>;
+  // Une capture qui échouerait ne doit jamais empêcher l'enregistrement lui-même : sans la classe de
+  // base (un mediabunny factice des tests, une version qui la renommerait), on enregistre seulement.
+  let base: Record<symbol, unknown> | undefined;
+  try {
+    base = core.CustomAudioDecoder as unknown as Record<symbol, unknown> | undefined;
+  } catch {
+    base = undefined;
+  }
+  if (typeof base !== "function") {
+    register();
+    return;
+  }
   const own = Object.getOwnPropertyDescriptor(base, Symbol.hasInstance);
   Object.defineProperty(base, Symbol.hasInstance, {
     configurable: true,
