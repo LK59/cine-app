@@ -25,16 +25,8 @@ function matchesTorrent(title: string, torrentName: string): boolean {
   return words.length >= 3 && rNorm.includes(words);
 }
 
-async function requestNotifPermission(): Promise<boolean> {
-  if (!("Notification" in window)) return false;
-  if (Notification.permission === "granted") return true;
-  if (Notification.permission === "denied") return false;
-  const result = await Notification.requestPermission();
-  return result === "granted";
-}
-
 function showNotif(title: string, body: string) {
-  if (Notification.permission !== "granted") return;
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   new Notification(title, { body, icon: "/icon-192.png", silent: false });
 }
 
@@ -84,9 +76,11 @@ export function SSENotifier() {
     };
   }, []);
 
-  useEffect(() => {
-    requestNotifPermission();
-  }, []);
+  // Plus de demande d'autorisation au montage (18/11/2026) : chaque ouverture de la Gestion appelait
+  // `Notification.requestPermission()` hors de tout geste — Firefox et Safari la refusent avec une
+  // erreur en console à chaque page, Chrome affiche une demande non sollicitée (et finit par classer
+  // le site parmi les insistants). L'autorisation se donne depuis le bouton des notifications
+  // (`PushToggle`, Compte) ; une fois accordée, `showNotif` s'en sert ici.
 
   useEffect(() => {
     let es: EventSource | null = null;
