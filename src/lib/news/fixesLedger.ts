@@ -1426,6 +1426,124 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.56.0",
+    page: "10.43",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Les épisodes de « Des gens bien » jouent de nouveau dans Chrome au lieu de finir sur un écran d'erreur.",
+        en: "The episodes of “Des gens bien” play in Chrome again instead of ending on an error screen.",
+        es: "Los episodios de «Des gens bien» vuelven a reproducirse en Chrome en lugar de terminar en una pantalla de error.",
+        de: "Die Folgen von „Des gens bien“ laufen in Chrome wieder, statt mit einer Fehlermeldung zu enden.",
+      },
+      {
+        fr: "Fermer le lecteur juste après avoir appuyé sur Lire ne lance plus la lecture en arrière-plan.",
+        en: "Closing the player right after pressing Play no longer starts playback in the background.",
+        es: "Cerrar el reproductor justo después de pulsar Reproducir ya no inicia la reproducción en segundo plano.",
+        de: "Wenn Sie den Player direkt nach „Abspielen“ schließen, startet die Wiedergabe nicht mehr im Hintergrund.",
+      },
+      {
+        fr: "Sur iPhone et iPad, l'épisode suivant s'ouvre normalement après un changement de piste son.",
+        en: "On iPhone and iPad, the next episode opens normally after an audio track change.",
+        es: "En iPhone y iPad, el siguiente episodio se abre con normalidad tras un cambio de pista de audio.",
+        de: "Auf iPhone und iPad öffnet sich die nächste Folge nach einem Wechsel der Tonspur wieder normal.",
+      },
+      {
+        fr: "Quand l'image se bloque plusieurs fois au même endroit, le lecteur passe plus vite à la suite au lieu de réessayer sans fin.",
+        en: "When the picture freezes several times at the same spot, the player now moves on faster instead of retrying endlessly.",
+        es: "Cuando la imagen se congela varias veces en el mismo punto, el reproductor avanza antes en lugar de reintentar sin fin.",
+        de: "Wenn das Bild mehrmals an derselben Stelle hängen bleibt, geht der Player schneller weiter, statt endlos neu zu versuchen.",
+      },
+      {
+        fr: "Un film dont le son doit être converti s'ouvre de nouveau quand le premier essai de conversion échoue.",
+        en: "A film whose sound has to be converted opens again when the first conversion attempt fails.",
+        es: "Una película cuyo sonido debe convertirse vuelve a abrirse cuando falla el primer intento de conversión.",
+        de: "Ein Film, dessen Ton umgewandelt werden muss, öffnet sich wieder, wenn der erste Umwandlungsversuch scheitert.",
+      },
+      {
+        fr: "Un fichier remplacé dans la bibliothèque n'affiche plus « Connexion perdue » sur une connexion qui marche.",
+        en: "A file replaced in the library no longer shows “Connection lost” on a working connection.",
+        es: "Un archivo reemplazado en la biblioteca ya no muestra «Conexión perdida» con una conexión que funciona.",
+        de: "Eine in der Mediathek ersetzte Datei zeigt bei funktionierender Verbindung nicht mehr „Verbindung verloren“.",
+      },
+      {
+        fr: "Les sous-titres n'affichent plus « &amp; » à la place de « & ».",
+        en: "Subtitles no longer show “&amp;” instead of “&”.",
+        es: "Los subtítulos ya no muestran «&amp;» en lugar de «&».",
+        de: "Untertitel zeigen nicht mehr „&amp;“ statt „&“.",
+      },
+      {
+        fr: "Quand la lecture échoue pour de bon, le message dit la vraie raison au lieu de « prend trop de temps ».",
+        en: "When playback fails for good, the message now gives the real reason instead of “taking too long”.",
+        es: "Cuando la reproducción falla definitivamente, el mensaje da el motivo real en lugar de «tarda demasiado».",
+        de: "Wenn die Wiedergabe endgültig scheitert, nennt die Meldung den wahren Grund statt „dauert zu lange“.",
+      },
+    ],
+  },
+  {
+    version: "10.56.0",
+    page: "10.43",
+    group: { fr: "Accueil et fiches", en: "Home and title pages", es: "Inicio y fichas", de: "Startseite und Titelseiten" },
+    items: [
+      {
+        fr: "La rangée d'une saga ne commence plus par un film annoncé sans date.",
+        en: "A saga's row no longer starts with an announced film that has no date yet.",
+        es: "La fila de una saga ya no empieza por una película anunciada sin fecha.",
+        de: "Die Reihe einer Filmreihe beginnt nicht mehr mit einem angekündigten Film ohne Datum.",
+      },
+      {
+        fr: "Sur ordinateur, la légende des flèches ne chevauche plus les onglets Films, Séries et Livres dans une fenêtre étroite.",
+        en: "On a computer, the arrow-key hint no longer overlaps the Films, Series and Books tabs in a narrow window.",
+        es: "En el ordenador, la leyenda de las flechas ya no se superpone a las pestañas Películas, Series y Libros en una ventana estrecha.",
+        de: "Am Computer überlappt der Pfeiltasten-Hinweis in einem schmalen Fenster nicht mehr die Reiter Filme, Serien und Bücher.",
+      },
+      {
+        fr: "Sur ordinateur, cliquer sur Recherche place le curseur dans le champ : on peut taper tout de suite.",
+        en: "On a computer, clicking Search puts the cursor in the field: you can type right away.",
+        es: "En el ordenador, al hacer clic en Buscar el cursor se coloca en el campo: se puede escribir enseguida.",
+        de: "Am Computer setzt ein Klick auf „Suche“ den Cursor ins Feld: Sie können sofort tippen.",
+      },
+    ],
+  },
+  {
+    version: "10.56.0",
+    page: "10.43",
+    group: { fr: "Téléphone et tablette", en: "Phone and tablet", es: "Móvil y tableta", de: "Handy und Tablet" },
+    items: [
+      {
+        fr: "Sur iPhone et iPad, le champ de recherche n'a plus deux croix.",
+        en: "On iPhone and iPad, the search field no longer has two clear buttons.",
+        es: "En iPhone y iPad, el campo de búsqueda ya no tiene dos cruces.",
+        de: "Auf iPhone und iPad hat das Suchfeld nicht mehr zwei Kreuze.",
+      },
+      {
+        fr: "Sur iPhone, le menu de tri de Ma liste n'est plus coupé à mi-hauteur.",
+        en: "On iPhone, the sort menu in My list is no longer cut off halfway.",
+        es: "En iPhone, el menú de orden de Mi lista ya no aparece cortado por la mitad.",
+        de: "Auf dem iPhone ist das Sortiermenü in „Meine Liste“ nicht mehr halb abgeschnitten.",
+      },
+    ],
+  },
+  {
+    version: "10.56.0",
+    page: "10.43",
+    group: { fr: "Rapidité", en: "Speed", es: "Rapidez", de: "Geschwindigkeit" },
+    items: [
+      {
+        fr: "Les fiches des séries s'ouvrent plus vite : elles ne téléchargent plus des informations qui ne s'affichent pas.",
+        en: "Series pages open faster: they no longer download information that isn't shown.",
+        es: "Las fichas de las series se abren más rápido: ya no descargan información que no se muestra.",
+        de: "Serienseiten öffnen sich schneller: Sie laden keine Informationen mehr, die nicht angezeigt werden.",
+      },
+      {
+        fr: "L'accueil n'attend plus TMDB quand une image ou une note doit être rafraîchie.",
+        en: "The home screen no longer waits for TMDB when an image or a rating needs refreshing.",
+        es: "El inicio ya no espera a TMDB cuando hay que actualizar una imagen o una nota.",
+        de: "Die Startseite wartet nicht mehr auf TMDB, wenn ein Bild oder eine Bewertung aktualisiert werden muss.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
