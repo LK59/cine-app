@@ -43,4 +43,17 @@ describe("légende des raccourcis", () => {
     expect(container.textContent).toContain("cinema.shortcutsNavigate");
     expect((container.firstElementChild as HTMLElement).className).toContain("pointer-events-none");
   });
+
+  // 18/11/2026 : à 1024 px, la légende chevauchait « Livres » de la bascule centrée. Mesuré dans
+  // Chromium : plus de contact dès ~1 060 px en français ; le seuil garde la marge de l'espagnol.
+  it("ne s'affiche qu'à partir de 1180 px, là où elle ne touche plus la bascule", async () => {
+    media.touch = false;
+    stubMedia();
+    const { CinemaShortcutsGuide } = await import("@/components/cinema/CinemaShortcutsGuide");
+    const { container } = render(<CinemaShortcutsGuide />);
+    const cls = (container.firstElementChild as HTMLElement).className.split(/\s+/);
+    expect(cls).toContain("hidden");
+    expect(cls).toContain("min-[1180px]:flex");
+    expect(cls).not.toContain("md:flex");
+  });
 });

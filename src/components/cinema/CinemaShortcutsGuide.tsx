@@ -28,11 +28,15 @@ export function CinemaShortcutsGuide() {
       // toggle is centred at the same height — on a narrow window the two collide. The shortcuts
       // it documents are the arrow keys, which anyone on a window that small is least likely to
       // be driving the screen with anyway.
+      // `md` (768 px) ne suffisait plus depuis que la bascule a gagné « Livres » : à 1024 px (un
+      // portable courant), la légende chevauchait « Livres » de 6 px en français, davantage en
+      // espagnol (« Películas », « Seleccionar »). Mesuré le 18/11/2026 : plus aucun contact dès
+      // ~1 060 px en français ; 1 180 px laisse la marge des quatre langues.
       // Le coin haut-droit est de nouveau libre : la loupe qui l'occupait a rejoint le rail, à
       // gauche, avec le reste de la navigation.
       // `pointer-events-none` : purement informative, elle ne prend jamais un clic à ce qu'elle
       // chevaucherait encore (une fenêtre étroite de portable tactile, par exemple).
-      className="pointer-events-none hidden items-center gap-3 rounded-full px-4 py-2 text-xs text-muted player-bar md:flex"
+      className="pointer-events-none hidden items-center gap-3 rounded-full px-4 py-2 text-xs text-muted player-bar min-[1180px]:flex"
     >
       <span className="flex items-center gap-1">
         <ArrowUp size={12} />
