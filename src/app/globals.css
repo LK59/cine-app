@@ -1816,7 +1816,9 @@ html[data-ui="touch"] {
   text-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
   animation: player-skip-total-in 120ms ease-out;
 }
-@keyframes player-skip-total-in { from { opacity: 0; transform: translate(-50%, 4px); } to { opacity: 1; transform: translate(-50%, 0); } }
+/* `translate` et non `transform` : centrée par `-translate-x-1/2` (la propriété `translate` de Tailwind 4), une
+   animation de `transform` s'y ajoutait — la bulle paraissait un instant décalée d'une demi-largeur (18/11/2026). */
+@keyframes player-skip-total-in { from { opacity: 0; translate: -50% 4px; } to { opacity: 1; translate: -50% 0; } }
 @media (prefers-reduced-motion: reduce) { .player-skip-total { animation: none; } }
 
 .player-resume-ring {
