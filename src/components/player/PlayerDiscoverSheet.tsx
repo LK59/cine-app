@@ -22,6 +22,7 @@ import {
   COLUMN_STYLE,
   MENU_STYLE,
   COLUMN_GAP,
+  TINY_COLUMN,
   CinemaOverview,
   CinemaDetailModal,
 } from "@/components/cinema/CinemaDetailLayout";
@@ -475,7 +476,7 @@ export function PlayerDiscoverSheet({
       {data && (
         <CinemaDetailPages
           first={
-            <div data-sheet-content="" style={COLUMN_STYLE} className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving: false, revealed: revealed || morph.handlesEntry })}`}>
+            <div data-sheet-content="" style={COLUMN_STYLE} className={`flex flex-col ${COLUMN_GAP} ${TINY_COLUMN} px-8 sm:px-16 ${detailColumnMotion({ leaving: false, revealed: revealed || morph.handlesEntry })}`}>
               <LateLogoTitle title={data.title} logo={data.logo} pending={data.logoPending} late={logoLate} desktop />
 
               <div className="flex flex-wrap items-center gap-3 text-sm text-muted">

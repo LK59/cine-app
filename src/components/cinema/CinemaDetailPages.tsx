@@ -7,7 +7,7 @@ import { useT } from "@/components/TranslationProvider";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { CinemaScrollHint } from "@/components/cinema/CinemaScrollHint";
 import type { CinemaCastMember } from "@/components/cinema/CinemaCastRow";
-import { CAST_CLASS, CAST_SHOWN, SECTION_CLASS, BELOW_SECTION_CLASS, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
+import { CAST_CLASS, CAST_SHOWN, TINY_HIDE, SECTION_CLASS, BELOW_SECTION_CLASS, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
 
 /**
  * Les pièces d'une fiche du bureau qui ne dépendent pas de ce qu'elle montre : les deux pages, le
@@ -86,7 +86,7 @@ export function CinemaDetailCastLine({ cast, className = "" }: { cast: CinemaCas
   if (cast.length === 0) return null;
   return (
     <>
-      <div className={`flex items-baseline gap-1.5 ${className}`}>
+      <div className={`flex items-baseline gap-1.5 ${TINY_HIDE} ${className}`}>
         <p className={CAST_CLASS}>
           {t("cinema.cast")}{" "}
           {cast.slice(0, CAST_SHOWN).map((c, i) => (

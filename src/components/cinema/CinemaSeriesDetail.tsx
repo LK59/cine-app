@@ -26,7 +26,7 @@ import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
-import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, SHORT_HIDE, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
+import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, SHORT_HIDE, TINY_HIDE, TINY_COLUMN, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
 import { useDesktopSheetShell, DesktopSheetFrame, DetailTrailerRow } from "@/components/cinema/DesktopSheetShell";
 import { playEpisodeFrom } from "@/lib/episodeRow";
 import { useSheetPlay } from "@/lib/useSheetPlay";
@@ -274,7 +274,7 @@ export function CinemaSeriesDetail({
           data-sheet-content=""
           style={COLUMN_STYLE}
           // La sortie est celle de la copie (`useSheetMorph`), plus celle de la colonne.
-          className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving: false, revealed: revealed || morph.handlesEntry })}`}
+          className={`flex flex-col ${COLUMN_GAP} ${TINY_COLUMN} px-8 sm:px-16 ${detailColumnMotion({ leaving: false, revealed: revealed || morph.handlesEntry })}`}
         >
           <CinemaDetailTitle title={item.title} logoUrl={item.logoUrl} />
 
@@ -290,7 +290,7 @@ export function CinemaSeriesDetail({
             {/* Celle du catalogue, là dès l'ouverture ; celle de TMDB en fondu sinon — voir `sheetEpisodeRuntime`. */}
             {runtimeLabel(episodeRuntime.minutes, true) && <span className={episodeRuntime.late ? late.fade : ""}>{runtimeLabel(episodeRuntime.minutes, true)}</span>}
           </DottedFacts>
-          {item.genres.length > 0 && <p className="text-sm text-muted">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</p>}
+          {item.genres.length > 0 && <p className={`text-sm text-muted ${TINY_HIDE}`}>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</p>}
           </div>
 
           {!lead.taglineKnown ? <ReservedLine className={`h-[1.1rem] ${SHORT_HIDE}`} /> : <CinemaTagline text={lead.tagline} className={`${SHORT_HIDE} ${lead.taglineLate ? late.fade : ""}`} />}

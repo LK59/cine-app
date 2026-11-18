@@ -78,6 +78,20 @@ export const SECTION_CLASS =
  */
 export const SHORT_HIDE = "[@media(max-height:719px)]:hidden";
 
+/**
+ * Sous 600 px de haut, un palier de plus (18/11/2026) : un portable 1280×800 zoomé à 150 % ne laisse que
+ * ~853×533 px à la page, et la colonne y dépassait d'une centaine de pixels — le logo et l'année passaient
+ * sous le bouton Retour, hors d'atteinte puisque la première page ne défile pas. Deux choses y coûtaient :
+ * - la ligne des genres et celle de la distribution, qui se taisent (`TINY_HIDE`) ; la distribution reste
+ *   sur la seconde page ;
+ * - la colonne à 46 % de la largeur, si étroite que « Reprendre · 1 h 43 restantes » et « Recommencer
+ *   depuis le début » passaient sur deux lignes : elle s'élargit (`TINY_COLUMN`, plus fort que le style
+ *   en ligne de `COLUMN_STYLE`).
+ * Au-dessus de 600 px, rien ne change.
+ */
+export const TINY_HIDE = "[@media(max-height:599px)]:hidden";
+export const TINY_COLUMN = "[@media(max-height:599px)]:!w-[min(40rem,62vw)]";
+
 
 
 /**
