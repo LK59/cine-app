@@ -59,5 +59,7 @@ function ratingOrThrow(tmdbId: number, mediaType: "movie" | "series"): Promise<s
     const rating = await omdb.getRating(imdbId);
     if (rating.Response !== "True" || !rating.imdbRating || rating.imdbRating === "N/A") return null;
     return rating.imdbRating;
-  });
+    // Le catalogue des séries attend cette note pour chacune (`toCinemaSeries`) : une note expirée sert
+    // pendant son recalcul plutôt que de faire attendre TMDB puis OMDb (`serveStale`, 18/11/2026).
+  }, { serveStale: true });
 }
