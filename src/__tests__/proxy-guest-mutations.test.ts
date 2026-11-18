@@ -138,6 +138,15 @@ describe("proxy — what a plain user may write", () => {
     expect((await proxy(req("GET", "/api/bazarr/episodes/99/subtitles"))).status).toBe(200);
   });
 
+  // 18/11/2026 : `HEAD` comptait comme une écriture. Le lecteur demande la taille d'un fichier par
+  // un `HEAD` sur le flux quand elle n'est pas connue d'avance (`HttpByteSource.open`) : 403 pour
+  // tout compte ordinaire, un aller-retour perdu et un refus de plus au pare-feu.
+  it("treats HEAD as a read — the stream answers it, an admin-only read still refuses it", async () => {
+    const { proxy } = await import("@/proxy");
+    expect((await proxy(req("HEAD", "/api/jellyfin/stream/" + "a".repeat(32) + "/stream.mkv"))).status).toBe(200);
+    expect((await proxy(req("HEAD", "/api/activity"))).status).toBe(403);
+  });
+
   it("leaves an administrator alone", async () => {
     mockVerify.mockResolvedValue({ u: "louis", role: "admin" });
     const { proxy } = await import("@/proxy");
