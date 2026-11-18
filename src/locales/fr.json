@@ -2077,6 +2077,7 @@
   "player": {
     "badConnection": "Connexion instable",
     "frameFit": "Ajuster à l’écran",
+    "endsAt": "fin à {time}",
     "lock": {
       "menu": "Verrouiller l’écran",
       "hint": "Toucher pour déverrouiller",
@@ -2865,6 +2866,12 @@
       "trendingMovies": "Tendances — films",
       "trendingSeries": "Tendances — séries",
       "recommended": "Recommandé pour vous"
+    },
+    "nextAiring": {
+      "label": "Prochain épisode {when}",
+      "today": "aujourd’hui",
+      "tomorrow": "demain",
+      "weekday": "{day}"
     },
     "missing": {
       "count": "{n} épisode manquant|{n} épisodes manquants",

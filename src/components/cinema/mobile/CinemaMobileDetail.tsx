@@ -26,6 +26,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
 import { useIsShortViewport } from "@/lib/useIsMobile";
 import { usePlayerSeriesRequests } from "@/lib/usePlayerSeriesRequests";
+import { CinemaNextAiring } from "@/components/cinema/CinemaNextAiring";
 import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
 import { ImdbBadge } from "@/components/ImdbBadge";
@@ -588,6 +589,8 @@ export function CinemaMobileDetail({
             {fileMissing ? t("cinema.fileMissing") : sheetPlay.label}
           </button>
         )}
+        {/* Tout ce qui est sorti a été vu : quand arrive la suite (`nextAiring.ts`). */}
+        {isSeries && <CinemaNextAiring sonarrId={(item as CinemaSeries).sonarrId} show={facts.rewatch} className="mb-3 justify-center" />}
 
         {!playPending && playerEnabled && playTargetId && hasResume && !fileMissing && (
           <button

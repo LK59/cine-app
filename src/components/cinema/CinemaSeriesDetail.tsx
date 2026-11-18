@@ -1,6 +1,7 @@
 "use client";
 
 import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
+import { CinemaNextAiring } from "@/components/cinema/CinemaNextAiring";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -349,6 +350,8 @@ export function CinemaSeriesDetail({
                 className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
               />
             )}
+            {/* Tout ce qui est sorti a été vu : quand arrive la suite (`nextAiring.ts`). */}
+            <CinemaNextAiring sonarrId={item.sonarrId} show={facts.rewatch} className="px-3 py-1.5" />
 
             {/* Only when the NEXT episode itself has progress — a fresh, never-started episode
                 already opens at 0 via Lire above, same reasoning as CinemaMovieDetail's own

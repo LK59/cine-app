@@ -2077,6 +2077,7 @@
   "player": {
     "badConnection": "Instabile Verbindung",
     "frameFit": "An Bildschirm anpassen",
+    "endsAt": "endet um {time}",
     "lock": {
       "menu": "Bildschirm sperren",
       "hint": "Zum Entsperren tippen",
@@ -2865,6 +2866,12 @@
       "trendingMovies": "Im Trend — Filme",
       "trendingSeries": "Im Trend — Serien",
       "recommended": "Für Sie empfohlen"
+    },
+    "nextAiring": {
+      "label": "Nächste Folge {when}",
+      "today": "heute",
+      "tomorrow": "morgen",
+      "weekday": "am {day}"
     },
     "missing": {
       "count": "{n} Folge fehlt|{n} Folgen fehlen",

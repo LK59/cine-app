@@ -2077,6 +2077,7 @@
   "player": {
     "badConnection": "Unstable connection",
     "frameFit": "Fit to screen",
+    "endsAt": "ends at {time}",
     "lock": {
       "menu": "Lock screen",
       "hint": "Tap to unlock",
@@ -2865,6 +2866,12 @@
       "trendingMovies": "Trending movies",
       "trendingSeries": "Trending series",
       "recommended": "Recommended for you"
+    },
+    "nextAiring": {
+      "label": "Next episode {when}",
+      "today": "today",
+      "tomorrow": "tomorrow",
+      "weekday": "on {day}"
     },
     "missing": {
       "count": "{n} episode missing|{n} episodes missing",
