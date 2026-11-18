@@ -288,6 +288,22 @@ const ADVANCE_GUARD_MS = 2000;
  */
 /** Après le dernier appui d'une rafale de sauts, le temps sans aucun chargement à l'écran — voir `skipBurst`. */
 const SKIP_GRACE_MS = 500;
+/** Une cible pas encore chargée, dans une rafale, part après ce silence d'appuis — voir `pendingSkipTarget`. */
+const SKIP_SETTLE_MS = 250;
+/** Deux appuis plus rapprochés que ceci sont une rafale. */
+const SKIP_BURST_GAP_MS = 500;
+/** L'heure d'un appui — lue dans le gestionnaire d'un geste, jamais au rendu. */
+const skipClock = () => Date.now();
+
+/** La position est-elle déjà dans ce que l'élément a chargé (à une demi-seconde près de la fin d'une plage) ? */
+function isBuffered(video: HTMLVideoElement, time: number): boolean {
+  const ranges = video.buffered;
+  if (!ranges) return false;
+  for (let i = 0; i < ranges.length; i++) {
+    if (time >= ranges.start(i) && time <= ranges.end(i) - 0.5) return true;
+  }
+  return false;
+}
 
 function spinSkip(button: HTMLElement, turn: -1 | 1) {
   const arrow = button.querySelector<HTMLElement>(".player-skip-arrow");
@@ -411,6 +427,18 @@ export function PlayerControls({
   const [skipGrace, setSkipGrace] = useState(false);
   const [skipTotal, setSkipTotal] = useState(0);
   const skipGraceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * La cible d'une rafale hors de ce qui est chargé, pas encore envoyée (18/11/2026). Dix −10 s en une seconde
+   * envoyaient dix sauts à Safari, chacun avec son vidage et ses lectures abandonnées : les données de la cible
+   * arrivaient, mais l'élément se posait sur une cible intermédiaire puis filait au bout du tampon (*Mr. Robot*,
+   * 1 076 s visées, 1 120 s atteintes, « saut parti ailleurs »). Le premier appui part toujours aussitôt, et une
+   * cible déjà chargée aussi ; les appuis suivants d'une même rafale (moins de `SKIP_BURST_GAP_MS` entre deux)
+   * vers une cible pas encore chargée attendent `SKIP_SETTLE_MS` sans nouvel appui — il faut de toute façon
+   * attendre leurs octets. Dix appuis : deux sauts au lieu de dix, et jamais d'attente sur un appui seul.
+   */
+  const pendingSkipTarget = useRef<number | null>(null);
+  const pendingSkipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSkipAt = useRef(0);
   /**
    * Masqués, les contrôles ne prennent la position qu'une fois par seconde (28/09/2026). Chaque
    * `timeupdate` (~4 par seconde) faisait recalculer tout ce composant, même invisible — du travail
@@ -689,6 +717,7 @@ export function PlayerControls({
       video.removeEventListener("playing", end);
       video.removeEventListener("seeked", onSeeked);
       if (skipGraceTimer.current) clearTimeout(skipGraceTimer.current);
+      if (pendingSkipTimer.current) clearTimeout(pendingSkipTimer.current);
     };
   }, [videoRef]);
 
@@ -1015,10 +1044,29 @@ export function PlayerControls({
     // bornait alors à la position courante, c'est-à-dire ne bougeait pas. Les boutons, eux,
     // fonctionnaient : ils sont recréés à chaque rendu. C'est pourquoi les flèches semblaient
     // sans effet là où les boutons marchaient.
-    const from = positionNow ? positionNow() : video.currentTime;
+    // Une rafale en attente : on additionne à partir de sa cible, pas de la position d'avant.
+    const from = pendingSkipTarget.current ?? (positionNow ? positionNow() : video.currentTime);
     const limit = video.duration || duration || from;
     const target = Math.min(Math.max(0, from + deltaSeconds), limit);
-    seekElement(video, target, true);
+    if (pendingSkipTimer.current) clearTimeout(pendingSkipTimer.current);
+    pendingSkipTimer.current = null;
+    const now = skipClock();
+    // Seuls les pas de ±10 s font une rafale : Début, Fin, une minute (barre au clavier) sont des gestes voulus seuls.
+    const inBurst = Math.abs(deltaSeconds) <= 10 && now - lastSkipAt.current < SKIP_BURST_GAP_MS;
+    lastSkipAt.current = now;
+    if (!inBurst || isBuffered(video, target)) {
+      pendingSkipTarget.current = null;
+      seekElement(video, target, true);
+    } else {
+      pendingSkipTarget.current = target;
+      pendingSkipTimer.current = setTimeout(() => {
+        pendingSkipTimer.current = null;
+        const settled = pendingSkipTarget.current;
+        pendingSkipTarget.current = null;
+        const element = videoRef.current;
+        if (settled !== null && element) seekElement(element, settled, true);
+      }, SKIP_SETTLE_MS);
+    }
     // Lu avant le saut : la position d'où l'on recule est la fin du passage à sous-titrer (§150).
     replay.noteSkip(deltaSeconds, from);
     noteSkipBurst(target - from);

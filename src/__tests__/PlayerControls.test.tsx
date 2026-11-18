@@ -808,6 +808,8 @@ describe("PlayerControls", () => {
     expect(video.currentTime).toBe(0);
 
     video.currentTime = 95;
+    // Deux gestes séparés, pas une rafale (18/11/2026, `SKIP_BURST_GAP_MS`).
+    await new Promise((r) => setTimeout(r, 520));
     await user.click(screen.getByTitle("player.forward10"));
     // 95 + 10 clamped to duration (100)
     expect(video.currentTime).toBe(100);
@@ -828,6 +830,8 @@ describe("PlayerControls", () => {
     await user.click(screen.getByTitle("player.rewind10"));
     expect(onSeekRequest).toHaveBeenLastCalledWith(644.6);
     expect(video.currentTime).toBeCloseTo(644.6, 5);
+    // Deux gestes séparés, pas une rafale (18/11/2026, `SKIP_BURST_GAP_MS`).
+    await new Promise((r) => setTimeout(r, 520));
     await user.click(screen.getByTitle("player.forward10"));
     expect(onSeekRequest).toHaveBeenLastCalledWith(664.6);
   });
@@ -1101,6 +1105,8 @@ describe("PlayerControls au clavier, sans focus dans le lecteur", () => {
 
     await act(async () => { press("ArrowRight"); });
     expect(video!.currentTime).toBeCloseTo(110, 1);
+    // Deux gestes séparés, pas une rafale (18/11/2026, `SKIP_BURST_GAP_MS`).
+    await new Promise((r) => setTimeout(r, 520));
 
     await act(async () => { press("ArrowLeft"); });
     expect(video!.currentTime).toBeCloseTo(100, 1);

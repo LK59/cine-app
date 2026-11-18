@@ -70,17 +70,24 @@ describe("PlayerControls — rafale de sauts", () => {
     await act(async () => {});
     const nav = (name: string) => container.querySelector(`[data-player-nav="${name}"]`) as HTMLElement | null;
 
-    // Trois +10 de suite ; le lecteur attend ses octets (`waiting`).
+    // Trois +10 de suite, hors de ce qui est chargé : le premier part aussitôt, les deux autres en un seul saut à la
+    // fin de la rafale.
+    const seeks: number[] = [];
+    Object.defineProperty(video, "currentTime", { configurable: true, get: () => time, set: (v: number) => { time = v; seeks.push(v); } });
     for (let i = 0; i < 3; i++) await act(async () => void fireEvent.click(nav("skip-fwd")!));
-    await act(async () => void fireEvent(video, new Event("waiting")));
+    expect(seeks).toEqual([110]);
+    await act(async () => void vi.advanceTimersByTime(260));
+    expect(seeks).toEqual([110, 130]);
     expect(time).toBe(130);
+    // Le lecteur attend ses octets (`waiting`).
+    await act(async () => void fireEvent(video, new Event("waiting")));
     expect(nav("skip-fwd")).not.toBeNull();
     expect(container.querySelector(".player-wait-wheel")).toBeNull();
     expect(container.querySelector(".player-wait-thread")).toBeNull();
     expect(container.querySelector("[data-player-skip-total]")?.textContent).toBe("+0:30");
 
-    // La demi-seconde passée, toujours sans image : le fil et l'anneau, les boutons toujours là, plus de bulle.
-    await act(async () => void vi.advanceTimersByTime(600));
+    // La demi-seconde passée depuis le dernier appui, toujours sans image : le fil et l'anneau, les boutons toujours là, plus de bulle.
+    await act(async () => void vi.advanceTimersByTime(340));
     expect(container.querySelector(".player-wait-thread")).not.toBeNull();
     expect(container.querySelector(".player-wait-wheel")).toBeNull();
     expect(nav("playpause")!.querySelector(".player-resume-ring")).not.toBeNull();
@@ -92,6 +99,20 @@ describe("PlayerControls — rafale de sauts", () => {
     expect(nav("playpause")!.querySelector(".player-resume-ring")).toBeNull();
     await act(async () => void fireEvent(video, new Event("waiting")));
     expect(container.querySelector(".player-wait-wheel")).not.toBeNull();
+  });
+
+  it("une cible déjà chargée part aussitôt", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => null }));
+    let video!: HTMLVideoElement;
+    const { container } = render(<Harness onVideo={(v) => (video = v)} />);
+    Object.defineProperty(video, "duration", { configurable: true, value: 3600 });
+    let time = 100;
+    Object.defineProperty(video, "currentTime", { configurable: true, get: () => time, set: (v: number) => (time = v) });
+    Object.defineProperty(video, "buffered", { configurable: true, value: { length: 1, start: () => 90, end: () => 160 } });
+    await act(async () => {});
+    await act(async () => void fireEvent.click(container.querySelector('[data-player-nav="skip-fwd"]')!));
+    expect(time).toBe(110);
   });
 
   it("l'heure de fin sous le temps restant, selon la vitesse ; rien dans la dernière minute", async () => {
