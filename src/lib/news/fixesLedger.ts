@@ -1544,6 +1544,32 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.57.0",
+    page: "10.43",
+    group: { fr: "Téléphone et tablette", en: "Phone and tablet", es: "Móvil y tableta", de: "Handy und Tablet" },
+    items: [
+      {
+        fr: "Pendant la saisie, la barre du bas s'efface au lieu de rester au-dessus du clavier.",
+        en: "While typing, the bottom bar steps aside instead of staying above the keyboard.",
+        es: "Mientras escribe, la barra inferior se aparta en lugar de quedarse encima del teclado.",
+        de: "Beim Tippen weicht die untere Leiste aus, statt über der Tastatur zu bleiben.",
+      },
+    ],
+  },
+  {
+    version: "10.57.0",
+    page: "10.43",
+    group: { fr: "Accueil et fiches", en: "Home and title pages", es: "Inicio y fichas", de: "Startseite und Titelseiten" },
+    items: [
+      {
+        fr: "Les rôles des acteurs (voix, non crédité, dans son propre rôle…) s'affichent dans votre langue.",
+        en: "Actors' roles (voice, uncredited, as themselves…) are shown in your language.",
+        es: "Los papeles de los actores (voz, sin acreditar, como sí mismo…) se muestran en su idioma.",
+        de: "Die Rollen der Schauspieler (Stimme, ohne Nennung, als sie selbst …) werden in Ihrer Sprache angezeigt.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
