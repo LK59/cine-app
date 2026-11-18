@@ -529,8 +529,10 @@ async function runTick(now: number): Promise<string | null> {
         if (error instanceof XrayServiceError) throw error.cause ?? error;
         // Propre à cet élément : un échec, et la file continue. Une réponse d'erreur (TMDB, Jellyfin) est
         // retentée dans une semaine ; une erreur de réseau dans l'heure, et le tour s'arrête là — une
-        // panne de Jellyfin ne met pas vingt éléments en échec par minute.
-        const answered = error instanceof HttpError;
+        // panne de Jellyfin ne met pas vingt éléments en échec par minute. Un 502, 503 ou 504 n'est pas une réponse
+        // sur l'élément mais un service qui démarre ou qu'on ne joint pas : le 18/11/2026, Jellyfin redémarrait
+        // (« 503 » et sa page d'attente) et vingt épisodes ont été mis en échec pour une semaine en une seconde.
+        const answered = error instanceof HttpError && !(error.status >= 502 && error.status <= 504);
         markRow(row.itemId, { status: "failed", error: errorText(error), finishedAt: now, checkedAt: answered ? now : now - REOPEN_AFTER_MS + TRANSIENT_RETRY_MS });
         logError("xray/scan-item", error, { itemId: row.itemId });
         if (!answered) break;

@@ -441,6 +441,20 @@ describe("un élément en erreur ne bloque pas la file", () => {
     expect(enqueuedIds()).toContain(id("1"));
   });
 
+  it("un Jellyfin qui démarre (503) est une panne passagère, pas un échec d'une semaine (18/11/2026)", async () => {
+    lib.targetErrors.set(id("1"), new HttpError("Jellyfin : 503 Service Unavailable", 503));
+    await scanTick(NOW);
+    // Le tour s'arrête au premier : pas vingt épisodes en échec en une seconde.
+    expect(enqueuedIds()).toEqual([]);
+    expect(getRow(id("2"))?.status).toBe("pending");
+    lib.targetErrors.clear();
+    await scanTick(NOW + 60_000);
+    finish("2");
+    finish("3");
+    await scanTick(NOW + HOUR + 2 * 60_000);
+    expect(enqueuedIds()).toContain(id("1"));
+  });
+
   it("le service lui-même en panne arrête le tour, sans rien marquer", async () => {
     svc.enqueueError = new HttpError("laterna-xray jobs : 503", 503);
     await scanTick(NOW);
