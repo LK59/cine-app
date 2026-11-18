@@ -60,6 +60,16 @@ describe("POST /api/startup-timing", () => {
     expect(mockLog.mock.calls[1][0]).not.toHaveProperty("hiddenAtMs");
   });
 
+  it("écrit le catalogue à l'écran et la navigation, bornés (18/11/2026)", async () => {
+    // Un autre compte : le seuil de mesures par compte (`startupTimingAllowed`) est partagé par ce fichier.
+    mockVerifySessionFull.mockResolvedValue({ u: "nath", jfUser: "nath", role: "user" });
+    await post({ cacheUsed: true, shownMs: 812.6, navWorkerMs: 40, navFirstByteMs: 310, navHtmlMs: 402, navDomMs: -3, navEvil: 5 });
+    const line = mockLog.mock.calls[0][0];
+    expect(line).toMatchObject({ shownMs: 813, navWorkerMs: 40, navFirstByteMs: 310, navHtmlMs: 402 });
+    expect(line).not.toHaveProperty("navDomMs");
+    expect(line).not.toHaveProperty("navEvil");
+  });
+
   it("écrit le type de navigation connu, et rien d'autre (26/10/2026)", async () => {
     // Un compte à part : le plafond d'écritures par compte (`startupTimingAllowed`) est partagé par le fichier.
     mockVerifySessionFull.mockResolvedValue({ u: "nav", jfUser: "Nav", role: "user" });

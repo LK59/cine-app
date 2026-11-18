@@ -36,6 +36,13 @@ export function logStartupTiming(fields: {
   idbMs?: number | null;
   /** L'arrivée de « Reprendre » par le réseau (depuis la navigation). */
   resumeNetworkMs?: number | null;
+  /** La première image peinte avec les rangées de l'accueil (18/11/2026, `noteCatalogueShown`). */
+  shownMs?: number;
+  /** La navigation : service worker réveillé, premier octet, HTML reçu, document analysé (18/11/2026). */
+  navWorkerMs?: number;
+  navFirstByteMs?: number;
+  navHtmlMs?: number;
+  navDomMs?: number;
   /** Quand la page est passée en arrière-plan avant la fin de l'ouverture — mesures d'après omises. */
   hiddenAtMs?: number;
   /** « Reprendre » dessiné depuis l'appareil, puis corrigé par le réseau — voir `noteContinueReconciled`. */

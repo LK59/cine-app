@@ -123,6 +123,13 @@ export async function POST(req: NextRequest) {
     bootMs: ms(body.bootMs),
     idbMs: ms(body.idbMs),
     resumeNetworkMs: ms(body.resumeNetworkMs),
+    // Le catalogue à l'écran et la navigation (18/11/2026, `noteCatalogueShown`, `navigationTimingFields`).
+    ...Object.fromEntries(
+      ["shownMs", "navWorkerMs", "navFirstByteMs", "navHtmlMs", "navDomMs"].flatMap((key) => {
+        const value = ms(body[key]);
+        return value === null ? [] : [[key, value]];
+      }),
+    ),
     // La page est passée en arrière-plan pendant l'ouverture : les mesures d'après ne sont pas
     // envoyées (`beforeHidden`, persistentCache.ts), et ceci dit pourquoi elles manquent.
     ...(ms(body.hiddenAtMs) !== null ? { hiddenAtMs: ms(body.hiddenAtMs) as number } : {}),

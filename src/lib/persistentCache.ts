@@ -585,6 +585,8 @@ const EMPTY_TIMING = {
   resumeFromCache: false,
   /** Ce que la réponse fraîche a corrigé dans la rangée — voir `noteContinueReconciled`. */
   resumeChanges: null as ContinueChanges | null,
+  /** La première image peinte avec les rangées de l'accueil — voir `noteCatalogueShown`. */
+  shownMs: null as number | null,
   sent: false,
 };
 
@@ -696,6 +698,46 @@ function nowMs(): number {
   }
 }
 
+/**
+ * L'accueil vient de poser ses rangées : la prochaine image peinte est le catalogue à l'écran (18/11/2026).
+ *
+ * `cacheMs` dit quand les données de l'appareil sont prêtes, pas quand on les voit : l'enquête sur le démarrage
+ * (18/11/2026) trouvait 200 à 400 ms inexpliquées entre la réponse lue et `networkMs`, sans rien qui mesure le
+ * premier dessin de l'accueil. Appelé par les deux écrans (`CinemaClient`, `CinemaMobileClient`) dès qu'ils ont un
+ * catalogue de films ; deux `requestAnimationFrame` : le premier avant le dessin, le second après. Une fois.
+ */
+export function noteCatalogueShown(): void {
+  if (timing.shownMs !== null || typeof requestAnimationFrame !== "function") return;
+  timing.shownMs = -1;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    timing.shownMs = nowMs();
+  }));
+}
+
+/**
+ * La navigation, vue par le navigateur (18/11/2026) : avant le script en ligne, 0,48 s en médiane passaient sans
+ * qu'on sache où — réveil du service worker, attente du serveur, HTML, styles. Depuis le début de la navigation :
+ * `navWorkerMs` (le service worker réveillé, absent sans lui), `navFirstByteMs`, `navHtmlMs` (HTML reçu),
+ * `navDomMs` (document analysé).
+ */
+function navigationTimingFields(): Record<string, number> {
+  try {
+    const entry = performance.getEntriesByType?.("navigation")[0] as PerformanceNavigationTiming | undefined;
+    if (!entry) return {};
+    const out: Record<string, number> = {};
+    const put = (key: string, value: number) => {
+      if (Number.isFinite(value) && value > 0) out[key] = Math.round(value);
+    };
+    put("navWorkerMs", entry.workerStart);
+    put("navFirstByteMs", entry.responseStart);
+    put("navHtmlMs", entry.responseEnd);
+    put("navDomMs", entry.domInteractive);
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 /** Ce qui a changé dans « Reprendre » entre le cache et la réponse fraîche, carte par carte. */
 export interface ContinueChanges {
   added: number;
@@ -738,6 +780,8 @@ function reportTiming(): void {
     resumeNetworkMs: beforeHidden(timing.resumeNetworkMs),
     networkMs: beforeHidden(timing.networkMs),
     resumeFromCache: timing.resumeFromCache,
+    ...(timing.shownMs !== null && timing.shownMs >= 0 && beforeHidden(timing.shownMs) !== null ? { shownMs: timing.shownMs } : {}),
+    ...navigationTimingFields(),
     ...(timing.resumeChanges
       ? {
           resumeAdded: timing.resumeChanges.added,

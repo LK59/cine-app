@@ -1,5 +1,6 @@
 "use client";
 
+import { noteCatalogueShown } from "@/lib/persistentCache";
 import { OfflineDownloadsButton } from "@/components/offline/OfflineDownloadsButton";
 import { BooksBrowseAllButton, BooksHomeLazy, useBooksMode } from "@/components/books/BooksMode";
 import { SlowLaunchDownloads } from "@/components/offline/SlowLaunchDownloads";
@@ -394,6 +395,10 @@ export function CinemaClient() {
     MOVIES_CATALOGUE_KEY,
     cinemaFetcher
   );
+  // Le catalogue à l'écran : mesuré à la première image qui le montre (`noteCatalogueShown`, ligne `ouverture`).
+  useEffect(() => {
+    if (movies) noteCatalogueShown();
+  }, [movies]);
   /**
    * Différé, sauf quand une série est visée — la même règle que sur téléphone.
    *

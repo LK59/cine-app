@@ -1,5 +1,6 @@
 "use client";
 
+import { noteCatalogueShown } from "@/lib/persistentCache";
 import { OfflineDownloadsButton } from "@/components/offline/OfflineDownloadsButton";
 import { BooksBrowseAllButton, BooksHomeLazy, useBooksMode } from "@/components/books/BooksMode";
 import { SlowLaunchDownloads } from "@/components/offline/SlowLaunchDownloads";
@@ -217,6 +218,10 @@ export function CinemaMobileClient() {
     MOVIES_CATALOGUE_KEY,
     cinemaFetcher
   );
+  // Le catalogue à l'écran : mesuré à la première image qui le montre (`noteCatalogueShown`, ligne `ouverture`).
+  useEffect(() => {
+    if (movies) noteCatalogueShown();
+  }, [movies]);
   // Series (and its Continue Watching feed) stay unfetched until the tab is actually opened —
   // same lazy contract as desktop, and more valuable here where the connection may be mobile data.
   /**
