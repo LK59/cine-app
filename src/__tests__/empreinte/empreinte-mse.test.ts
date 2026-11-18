@@ -35,9 +35,16 @@ import { traceReset } from "@/lib/webcodecs/trace";
 
 let playhead = 0;
 let sourceInstance: FakeSource | null = null;
+/**
+ * L'étendue (horloge du lecteur) de chaque morceau de média, pour les tampons « datés » seulement
+ * (`FakeBuffer.timed`) : le scénario de l'ajout devant le chargé a besoin de plages placées où le
+ * média tombe. Les autres gardent le modèle d'origine, et leurs empreintes ne bougent pas.
+ */
+const spans = new WeakMap<Uint8Array, [number, number]>();
 
 class FakeBuffer extends EventTarget {
   static live = new Set<FakeBuffer>();
+  static timed = false;
   halted = false;
   updating = false;
   mode = "segments";
@@ -69,7 +76,17 @@ class FakeBuffer extends EventTarget {
     }
     note("buffer", this.name, "append", data.byteLength, data[0]);
     this.updating = true;
-    if (this.initSeen) {
+    const span = FakeBuffer.timed ? spans.get(data) : undefined;
+    if (span) {
+      const all = [...this.ranges, span].sort((a, b) => a[0] - b[0]);
+      const merged: [number, number][] = [];
+      for (const [s, e] of all) {
+        const last = merged[merged.length - 1];
+        if (last && s <= last[1] + 1e-6) last[1] = Math.max(last[1], e);
+        else merged.push([s, e]);
+      }
+      this.ranges = merged;
+    } else if (this.initSeen) {
       const start = this.ranges.length ? this.ranges[0][0] : playhead;
       const end = (this.ranges.length ? this.ranges[0][1] : playhead) + this.secondsPerAppend;
       this.ranges = [[start, end]];
@@ -210,28 +227,48 @@ const PLAN: RemuxPlan = {
   durationSeconds: 3600,
 };
 
-/** Le remultiplexeur : deux secondes par segment, une image clé toutes les deux secondes. */
+/**
+ * Le remultiplexeur : deux secondes par segment, une image clé toutes les deux secondes. Une lecture
+ * bornée (`seekTo(s, stopAt)`, l'ajout devant le chargé) s'arrête avant la première image clé à la
+ * borne ou après : `stoppedShort` dès le dernier segment, puis null.
+ */
 function fakeRemuxer(segments = 2000, readMs = 40) {
   let index = 0;
   let from = 0;
+  let stopAt: number | null = null;
+  let stopped = false;
   return {
     seekable: true,
     plan: () => PLAN,
     keyframeAtOrBefore: (s: number) => Math.floor(s / 2) * 2,
-    diagnostics: () => ({ presentationDelaySeconds: 0.2, clampedSamples: 0 }),
-    seekTo: (s: number) => {
-      note("remuxer", "seekTo", round(s));
+    diagnostics: () => ({ presentationDelaySeconds: 0.2, clampedSamples: 0, segmentStartSeconds: (from + index - 1) * 2 }),
+    seekTo: (s: number, stop: number | null = null) => {
+      if (stop === null) note("remuxer", "seekTo", round(s));
+      else note("remuxer", "seekTo", round(s), "borne", round(stop));
       from = Math.floor(s / 2);
       index = 0;
+      stopAt = stop;
+      stopped = false;
+    },
+    get stoppedShort() {
+      return stopped;
+    },
+    get stopAhead() {
+      return stopAt !== null && !stopped;
     },
     nextSegment: async (): Promise<RemuxSegment | null> => {
       await new Promise((r) => setTimeout(r, readMs));
-      if (from + index >= segments) return null;
+      if (stopped || from + index >= segments) return null;
       index += 1;
       const n = from + index;
+      const video = new Uint8Array(1000 + (n % 7)).fill(n % 256);
+      const audio = new Uint8Array(100 + (n % 3)).fill((n + 100) % 256);
+      spans.set(video, [(n - 1) * 2 + 0.2, n * 2 + 0.2]);
+      spans.set(audio, [(n - 1) * 2 + 0.2, n * 2 + 0.2]);
+      if (stopAt !== null && n * 2 >= stopAt) stopped = true;
       return {
-        video: [new Uint8Array(1000 + (n % 7)).fill(n % 256)],
-        audio: new Uint8Array(100 + (n % 3)).fill((n + 100) % 256),
+        video: [video],
+        audio,
         subtitles: [{ track: 4, startSeconds: n * 2, endSeconds: n * 2 + 1.5, text: `ligne ${n}` }],
         endSeconds: n * 2,
       };
@@ -296,6 +333,7 @@ function summary() {
 
 beforeEach(() => {
   traceReset();
+  FakeBuffer.timed = false;
   rec = installRecorder({ seed: 3 });
   fil.rec = rec;
   rec.entries.length = 0;
@@ -369,6 +407,29 @@ describe("empreinte — MseSource", () => {
     sourceInstance!.readyState = "closed";
     sourceInstance!.dispatchEvent(new Event("sourceclose"));
     await rec.advance(1000);
+    summary();
+    await rec.fingerprint("mse");
+  });
+
+  // 18/11/2026 : un « −10 s » qui retombe cinq secondes avant l'image clé d'arrivée du saut
+  // précédent. Le chargé est gardé, seul ce qui manque est lu devant lui, puis la lecture reprend au
+  // bout de ce qui est gardé ; la tête va à la cible exacte.
+  it("« −10 s » juste avant le chargé : ajout devant, le chargé gardé", async () => {
+    FakeBuffer.timed = true;
+    await attach(1001);
+    await fire("playing");
+    await playFor(4);
+    summary();
+    // Le geste tel que l'élément le fait : sa tête part vers 995 s, puis `seeking`.
+    rec.step("« −10 s » : l'élément part vers 995");
+    playhead = 995;
+    (video as unknown as { seeking: boolean }).seeking = true;
+    await fire("seeking");
+    await rec.advance(400);
+    (video as unknown as { seeking: boolean }).seeking = false;
+    await fire("seeked");
+    summary();
+    await playFor(10);
     summary();
     await rec.fingerprint("mse");
   });

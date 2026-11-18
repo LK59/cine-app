@@ -1,0 +1,123 @@
+step ouverture à 1001
+source new
+trace attente de sourceopen
+trace MediaSource ouverte, création des tampons
+source addSourceBuffer video/mp4; codecs="hvc1.2.4.L150.90"
+source addSourceBuffer audio/mp4; codecs="ec-3"
+buffer vidéo append 1 1
+trace segment d'initialisation vidéo accepté
+buffer son append 1 2
+trace segment d'initialisation audio accepté
+remuxer seekTo 1001
+trace segment 1 construit — jusqu'à 1002.0 s, 1004 o vidéo en 1 fragment(s), 100 o audio
+source duration= 3600.2
+onSubtitles 1
+buffer vidéo append 1004 245
+buffer son append 100 89
+trace ouverture : le média couvre 1001.0 s, la tête y est posée
+élément currentTime= 1001
+trace après envoi : tampon jusqu'à 1002.2 s, tête à 1001.0 s
+trace segment 2 construit — jusqu'à 1004.0 s, 1005 o vidéo en 1 fragment(s), 101 o audio
+onSubtitles 1
+buffer vidéo append 1005 246
+buffer son append 101 90
+trace après envoi : tampon jusqu'à 1004.2 s, tête à 1001.0 s
+trace segment 3 construit — jusqu'à 1006.0 s, 1006 o vidéo en 1 fragment(s), 102 o audio
+onSubtitles 1
+buffer vidéo append 1006 247
+buffer son append 102 91
+trace après envoi : tampon jusqu'à 1006.2 s, tête à 1001.0 s
+trace segment 4 construit — jusqu'à 1008.0 s, 1000 o vidéo en 1 fragment(s), 100 o audio
+onSubtitles 1
+buffer vidéo append 1000 248
+buffer son append 100 92
+trace après envoi : tampon jusqu'à 1008.2 s, tête à 1001.0 s
+onSubtitles 1
+buffer vidéo append 1001 249
+buffer son append 101 93
+trace après envoi : tampon jusqu'à 1010.2 s, tête à 1001.0 s
+onSubtitles 1
+buffer vidéo append 1002 250
+buffer son append 102 94
+trace après envoi : tampon jusqu'à 1012.2 s, tête à 1001.0 s
+onSubtitles 1
+buffer vidéo append 1003 251
+buffer son append 100 95
+onSubtitles 1
+buffer vidéo append 1004 252
+buffer son append 101 96
+onSubtitles 1
+buffer vidéo append 1005 253
+buffer son append 102 97
+onSubtitles 1
+buffer vidéo append 1006 254
+buffer son append 100 98
+onSubtitles 1
+buffer vidéo append 1000 255
+buffer son append 101 99
+onSubtitles 1
+buffer vidéo append 1001 0
+buffer son append 102 100
+onSubtitles 1
+buffer vidéo append 1002 1
+buffer son append 100 101
+onSubtitles 1
+buffer vidéo append 1003 2
+buffer son append 101 102
+onSubtitles 1
+buffer vidéo append 1004 3
+buffer son append 102 103
+onSubtitles 1
+buffer vidéo append 1005 4
+buffer son append 100 104
+onSubtitles 1
+buffer vidéo append 1006 5
+buffer son append 101 105
+état {"lost":false,"seekPending":false,"position":1005,"lead":29.2,"delay":0.2,"buffers":[[[1000.2,1034.2]],[[1000.2,1034.2]]]}
+step « −10 s » : l'élément part vers 995
+trace saut de l'élément vers 995.0 s — vidéo 1000.20–1034.20 · audio 1000.20–1034.20
+trace saut demandé vers 995.0 s (le viseur) — tête à 995.0 s
+buffer vidéo remove 1025 3601.2
+buffer son remove 1025 3601.2
+trace ajout devant : la cible est à 5.20 s du chargé, gardé — reste vidéo 1000.20–1025.00 · audio 1000.20–1025.00 ; lecture de l'image clé d'avant la cible jusqu'à ce début
+remuxer seekTo 994.8 borne 1000.5
+onSubtitles 1
+buffer vidéo append 1001 242
+buffer son append 100 86
+trace après envoi : tampon jusqu'à 996.2 s, tête à 995.0 s
+onSubtitles 1
+buffer vidéo append 1002 243
+buffer son append 101 87
+trace après envoi : tampon jusqu'à 998.2 s, tête à 995.0 s
+onSubtitles 1
+buffer vidéo append 1003 244
+buffer son append 102 88
+trace après envoi : tampon jusqu'à 1025.0 s, tête à 995.0 s
+onSubtitles 1
+buffer vidéo append 1004 245
+buffer son append 100 89
+trace ajout devant fait : vidéo 994.20–1025.00 · audio 994.20–1025.00 — lecture reprise à 1025.0 s
+remuxer seekTo 1024.8
+trace après envoi : tampon jusqu'à 1025.0 s, tête à 995.0 s
+état {"lost":false,"seekPending":false,"position":995,"lead":30,"delay":0.2,"buffers":[[[994.2,1025]],[[994.2,1025]]]}
+onSubtitles 1
+trace coupure réseau : relecture depuis 1024.20 s, le tampon d'avant est gardé
+buffer vidéo remove 1024.2 3601.2
+buffer son remove 1024.2 3601.2
+buffer vidéo append 1002 1
+buffer son append 100 101
+trace après envoi : tampon jusqu'à 1026.2 s, tête à 996.0 s
+onSubtitles 1
+buffer vidéo append 1003 2
+buffer son append 101 102
+trace après envoi : tampon jusqu'à 1028.2 s, tête à 997.0 s
+onSubtitles 1
+buffer vidéo append 1004 3
+buffer son append 102 103
+onSubtitles 1
+buffer vidéo append 1005 4
+buffer son append 100 104
+onSubtitles 1
+buffer vidéo append 1006 5
+buffer son append 101 105
+état {"lost":false,"seekPending":false,"position":1005,"lead":29.2,"delay":0.2,"buffers":[[[994.2,1034.2]],[[994.2,1034.2]]]}
