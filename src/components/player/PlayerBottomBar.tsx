@@ -4,6 +4,7 @@ import { useOfflineSheetOpen } from "@/lib/offline/offlineSheetOpen";
 import { useEffect, useRef } from "react";
 import { useCinemaRoute, useSheetBehind, useSheetLeaving } from "@/lib/cinemaRoute";
 import { useIsShortViewport } from "@/lib/useIsMobile";
+import { useScreenKeyboard } from "@/lib/useScreenKeyboard";
 import { revealNavigation, useHideOnScroll } from "@/lib/useHideOnScroll";
 import { useT } from "@/components/TranslationProvider";
 import { PLAYER_NAV, activePanel, isOnPanel, openPanel } from "./playerNav";
@@ -86,7 +87,10 @@ export function PlayerBottomBar() {
     shownScreen.current = screenKey;
     revealNavigation();
   }, [screenKey]);
-  const away = hidden || covered;
+  // Le clavier de l'écran ouvert, la barre s'efface : posée dessus pendant la saisie dans Recherche, elle
+  // cachait des résultats (18/11/2026). Elle revient quand il se ferme, même champ toujours actif.
+  const keyboard = useScreenKeyboard();
+  const away = hidden || covered || keyboard;
   /** Ce qui sépare la barre du bord de l'écran — et donc ce qu'il faut franchir pour en sortir. */
   const gap = `calc(env(safe-area-inset-bottom, 0px) + ${short ? "0.5rem" : "0.75rem"})`;
   /** Quand le pointeur a déjà fait le travail — voir la garde du clic. */

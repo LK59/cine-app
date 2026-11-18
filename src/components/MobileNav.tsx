@@ -14,6 +14,7 @@ import { hardRefreshApp } from "@/lib/pwaRefresh";
 import { AppSignature } from "@/components/AppSignature";
 import { LiquidNavPill, LiquidTabLabel, liquidTabClass } from "@/components/LiquidNavPill";
 import { useIsShortViewport } from "@/lib/useIsMobile";
+import { useScreenKeyboard } from "@/lib/useScreenKeyboard";
 
 /** La clé de « Plus » sur la pilule : ce n'est pas une adresse, il ouvre la feuille. */
 const MORE = "more";
@@ -64,6 +65,9 @@ export function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
   const short = useIsShortViewport();
+  // Effacée pendant que le clavier de l'écran est ouvert, comme celle du cinéma (`PlayerBottomBar`).
+  const keyboard = useScreenKeyboard();
+  const navGap = `calc(env(safe-area-inset-bottom, 0px) + ${short ? "0.5rem" : "0.75rem"})`;
   /** Quand le pointeur a déjà navigué — voir la garde du clic. */
   const handledAt = useRef(0);
   /** L'appui en cours a changé de page au contact (et non ouvert « Plus », ou rien). */
@@ -245,7 +249,12 @@ export function MobileNav() {
         aria-label={t("nav.label")}
         data-gestion-nav
         className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-4 md:hidden"
-        style={{ bottom: `calc(env(safe-area-inset-bottom, 0px) + ${short ? "0.5rem" : "0.75rem"})` }}
+        style={{
+          bottom: navGap,
+          transform: keyboard ? `translateY(calc(100% + ${navGap} + 1rem))` : "none",
+          transition: `transform 280ms cubic-bezier(0.32, 0.72, 0, 1), visibility 0s linear ${keyboard ? 280 : 0}ms`,
+          visibility: keyboard ? "hidden" : "visible",
+        }}
       >
         <LiquidNavPill active={lensKey} onDragSelect={onDragSelect} compact={short} className="max-w-full">
           {() => (
