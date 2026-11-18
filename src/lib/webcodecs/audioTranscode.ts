@@ -305,6 +305,11 @@ async function primeEncoder(
         const next = await primer.next();
         if (next.done) return;
         firstSeconds ??= next.value.timestampSeconds;
+        // L'erreur de l'encodeur arrive pendant l'attente du décodeur, et l'a fermé : l'`encode` suivant
+        // levait « closed codec », que le `catch` plus bas prenait pour une panne du décodeur — la
+        // tentative entière échouait sans essayer le débit suivant, et sous un autre motif que le vrai
+        // (chasse du 18/11/2026). Rendue ici, l'erreur passe par `encoderError` comme prévu.
+        if (encoderError) return;
         encode(encoder, next.value, outChannels, config.codec);
       }
       for (let i = 0; i < 200 && encoder.encodeQueueSize > 0; i++) {
@@ -828,6 +833,9 @@ export class AudioTranscoder {
       }
       this.lastDecodedSeconds = next.value.timestampSeconds;
       this.noteInput(next.value);
+      // Tombé en panne pendant l'attente du décodeur : le vrai motif, pas le « closed codec » de
+      // l'`encode` sur un encodeur que WebCodecs a déjà fermé (chasse du 18/11/2026).
+      if (this.failure) throw new Error(this.failure);
       encode(this.encoder, next.value, this.channels, this.actualCodec, this.enhancer);
     }
 
@@ -1252,6 +1260,11 @@ function encode(
     timestamp: Math.round(decoded.timestampSeconds * 1e6),
     data: interleaved,
   });
-  encoder.encode(data);
-  data.close();
+  // Fermée quoi qu'il arrive : un encodeur tombé en erreur est fermé par WebCodecs, et `encode` y lève
+  // (« closed codec ») — l'AudioData restait alors ouverte jusqu'au ramasse-miettes (chasse du 18/11/2026).
+  try {
+    encoder.encode(data);
+  } finally {
+    data.close();
+  }
 }

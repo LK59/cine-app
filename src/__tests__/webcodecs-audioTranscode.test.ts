@@ -361,6 +361,53 @@ describe("AudioTranscoder", () => {
     expect(new Set(Encoder.configured.slice(1).map((c) => c.bitrate))).toEqual(new Set([384_000]));
   });
 
+  it("an encoder that fails in use and closes itself goes down the ladder, not out on « closed codec »", async () => {
+    // Chasse du 18/11/2026 : WebCodecs ferme un encodeur tombé en erreur, et tout `encode` ensuite lève.
+    // L'erreur arrive pendant l'attente du décodeur ; l'`encode` suivant de l'amorçage levait, et la
+    // tentative entière échouait sous « closed codec » au lieu d'essayer le débit suivant.
+    const { AudioTranscoder, forgetBitrateCeilings } = await load();
+    forgetBitrateCeilings();
+    const Base = fakeEncoderClass();
+    let first = true;
+    const closedData: boolean[] = [];
+    class Closing extends Base {
+      private failing = first;
+      private dead = false;
+      constructor(init: { output: (c: unknown) => void; error: (e: unknown) => void }) {
+        super(init as never);
+        first = false;
+        const encode = this.encode.bind(this);
+        this.encode = (data: FakeAudioData) => {
+          if (this.dead) throw new Error("Cannot call 'encode' on a closed codec");
+          encode(data);
+          if (this.failing) {
+            this.dead = true;
+            queueMicrotask(() => init.error({ message: "InternalAudioEncoderCocoa encoding failed" } as never));
+          }
+        };
+      }
+    }
+    vi.stubGlobal("AudioEncoder", Closing);
+    vi.stubGlobal(
+      "AudioData",
+      class extends FakeAudioData {
+        private index = closedData.push(false) - 1;
+        close() {
+          closedData[this.index] = true;
+        }
+      }
+    );
+    samples.mockImplementation(() => decoded(400));
+    const transcoder = await AudioTranscoder.open(source as never, track as never);
+    expect(transcoder.sampleEntry.length).toBeGreaterThan(20);
+    // Le premier débit essayé, puis un plus bas.
+    expect(Base.configured.length).toBeGreaterThan(1);
+    expect(Base.configured.at(-1)!.bitrate).toBeLessThan(Base.configured[0].bitrate!);
+    // Et chaque AudioData construite a été fermée, même celle que l'encodeur fermé a refusée.
+    expect(closedData.every(Boolean)).toBe(true);
+    forgetBitrateCeilings();
+  });
+
   it("says so rather than producing a track nothing describes", async () => {
     // An encoder that never carries the description: silently muxing that would give the browser
     // an audio track it cannot configure a decoder for.
