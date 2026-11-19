@@ -820,12 +820,12 @@ Beside them: `auth.log`, `startup.log`, `notifications.log`, `subtitle-gen.log` 
 
 ## Third-party code
 
-- `src/lib/webcodecs/truehd/truehd-wasm.mjs` and `src/lib/webcodecs/aac/aac-wasm.mjs`, committed,
-  are FFmpeg's TrueHD/MLP and AAC decoders (FFmpeg 7.1.5, configured without `--enable-gpl`, so
-  LGPL-2.1-or-later), compiled to WebAssembly. `tools/truehd-wasm/build.sh` and
-  `tools/aac-wasm/build.sh` rebuild them byte for byte from the checksummed FFmpeg release.
-- FLAC is decoded by `@wasm-audio-decoders/flac` (MIT); DTS and AC-3 by `@mediabunny/dts` and
-  `@mediabunny/ac3`, on top of `mediabunny` (all MPL-2.0).
+- `src/lib/webcodecs/truehd/truehd-wasm.mjs`, `src/lib/webcodecs/aac/aac-wasm.mjs` and
+  `src/lib/webcodecs/ac3dts/ac3dts-wasm.mjs`, committed, are FFmpeg's TrueHD/MLP, AAC, and AC-3/E-AC-3/DTS
+  decoders (FFmpeg 7.1.5, configured without `--enable-gpl`, so
+  LGPL-2.1-or-later), compiled to WebAssembly. `tools/truehd-wasm/build.sh`, `tools/aac-wasm/build.sh`
+  and `tools/ac3dts-wasm/build.sh` rebuild them byte for byte from the checksummed FFmpeg release.
+- FLAC is decoded by `@wasm-audio-decoders/flac` (MIT).
 
 ## License
 

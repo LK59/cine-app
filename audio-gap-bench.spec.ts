@@ -51,7 +51,7 @@ function ascFor(sampleRate: number, channels: number): Uint8Array {
   return new Uint8Array([(2 << 3) | (index >> 1), ((index & 1) << 7) | (config << 3)]);
 }
 
-/** Le même que `mediabunny-regress-bench.spec.ts` : trames de 1024 images, chacune l'empreinte de ce qu'il a reçu. */
+/** Le même que l'ancien `mediabunny-regress-bench.spec.ts` : trames de 1024 images, chacune l'empreinte de ce qu'il a reçu. */
 class FakeAudioEncoder {
   static async isConfigSupported(config: unknown) {
     return { supported: true, config };

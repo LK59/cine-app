@@ -322,7 +322,7 @@ flowchart TB
     RX --> VID["Video — samples copied<br/>H.264 · HEVC · AV1 · HDR · Dolby Vision"]
     RX --> AQ{"Audio — deliveredAudio<br/>can it cross MediaSource as-is?"}
     AQ -->|"yes"| ACP["Copied bit for bit<br/>AAC · AC-3 · E-AC-3 · FLAC · Opus, per browser"]
-    AQ -->|"no"| ADEC["softwareAudio.ts — decoded in the tab<br/>TrueHD WASM · AAC WASM · mediabunny AC-3 / DTS · FLAC"]
+    AQ -->|"no"| ADEC["softwareAudio.ts — decoded in the tab<br/>TrueHD WASM · AAC WASM · AC-3/E-AC-3/DTS WASM · FLAC"]
     ADEC --> AENC["audioTranscode.ts — AudioEncoder<br/>AAC, Apple order, ≤ 6 ch · or Opus"]
     AQ -->|"no decoder: MP2, MP3, Vorbis, PCM"| FALL
     VID --> MUX["mp4Muxer.ts · mp4Boxes.ts · mp4SampleEntries.ts<br/>init and media segments — fMP4"]
@@ -1278,22 +1278,18 @@ stretch.
 | It refuses, but the track can be decoded | **Decoded and re-encoded** |
 | Neither | Explicit refusal |
 
-Software decoders: `@mediabunny/dts` and `@mediabunny/ac3` (libavcodec in WASM, ~1.5 MB and
-~1.1 MB, lazily loaded).
+Software decoders: FFmpeg 7.1.5's AC-3, E-AC-3 and DTS decoders compiled to WebAssembly
+(`tools/ac3dts-wasm`, ~1.1 MB, lazily loaded), run in the same worker as the TrueHD module (one worker
+per module, `truehd/truehdDecoder.ts`); libFLAC; a plain conversion for PCM; the browser's own
+`AudioDecoder` for Opus, AAC and MP3. Packets come from the player's own container reader
+(`audioDemux.ts`), the one that already serves the picture (DECISIONS §197).
 
-They run in a worker the extension builds from an inline script (`blob:` URL, hence `worker-src
-blob:` in the CSP). The three packages move together, at exact versions, and an upgrade is proven
-by `mediabunny-regress-bench.spec.ts` — identical hashes before and after for the tracks found,
-the demuxed packets, the decoded planes and the remuxed audio segments (1.58.1 → 1.61.4 on
-2026-10-14: 58 tracks of 21 files, every line identical; the WASM decoders are byte-identical; the worker script the Next build emits
-is byte-identical to the published one, and decodes the same PCM in Chromium, Firefox and WebKit
-under the production CSP as in Node). Since 1.61.4 a worker
-that fails to start or dies **rejects** every pending and later command: our chain turns that into
-a named refusal of the native path, and the film goes to the server player
-(`mediabunny-worker-failure.test.ts`). Before, the command never answered: the opening waited out
-the encoder's priming timeout and blamed the encoder, and a worker lost mid-film left the sound
-reading forever. mediabunny still leaves one rejection unhandled after such a failure (the decoder's
-close, chained on the rejected call queue), which reaches `server.log` as a client error.
+Until 19/11/2026 this was mediabunny — its demuxer and `@mediabunny/ac3` / `@mediabunny/dts`. The
+replacement was proved identical to the sample on 100 library tracks (MKV, MP4, every codec) before
+mediabunny was removed; `audio-ref-bench.spec.ts` now keeps that reference for future changes. A worker
+that fails to start or dies is a named refusal of the native path, and the film goes to the server
+player (`lumen-audio-worker-failure.test.ts`); if no worker can be created at all, the module runs on
+the main thread, a batch at a time.
 
 ### The replacement codec is chosen, not assumed
 

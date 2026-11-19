@@ -12446,3 +12446,13 @@ développement pour les bancs de comparaison, jusqu'à un banc de référence re
 
 **Avant l'étape 2 (historique).** Séances réelles (iPhone, Opus d'animation, AAC refusé), lecture du journal ;
 ensuite, retirer mediabunny des dépendances (il ne resterait que le chemin coupé et les bancs de comparaison).
+
+**Retrait de mediabunny (préparé le 19/11/2026, branche `essai/retrait-mediabunny`, à déployer après quelques jours
+sans repli attribuable à la chaîne).** `softwareAudio.ts` ne passe plus que par notre chaîne : TrueHD, AAC en
+WebAssembly, et sinon `ownAudio.ts` ; un codec sans décodeur ici lève une erreur nommée et le film part au lecteur
+serveur (aucun dans la bibliothèque : inventaire des 10 911 fichiers, 19/11/2026). Retirés avec lui : l'option
+`audioChain`, l'interrupteur des administrateurs (la colonne `lumen_audio` reste, rien ne la lit), la capture des
+classes (`decoderClasses.ts`), l'ancien `flacDecoder.ts` (son en-tête vit dans `flacHeader.ts`), les tests et bancs
+propres à mediabunny ; `mediabunny`, `@mediabunny/ac3` et `@mediabunny/dts` quittent les dépendances. La référence
+du son est désormais `audio-ref-bench.spec.ts`, prise sur la chaîne prouvée identique. Empreintes du lecteur :
+identiques à celles de 10.62.2, d'avant Lumen.

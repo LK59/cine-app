@@ -17,7 +17,9 @@ $FFMPEG -v error -f lavfi -i "aevalsrc=$TONES:s=48000:d=12:c=5.1" -c:a libopus -
 $FFMPEG -v error -f lavfi -i "aevalsrc=0.3162*sin(2*PI*440*t)|0.1995*sin(2*PI*550*t)|0.1259*sin(2*PI*660*t):s=48000:d=12:c=3.0" -c:a libopus -b:a 256k -mapping_family 1 -f matroska - > "$WORK/opus30.mkv"
 $FFMPEG -v error -f lavfi -i "aevalsrc=$TONES:s=48000:d=12:c=5.1" -c:a aac -b:a 384k -f matroska - > "$WORK/aac51.mkv"
 cp "$HERE/index.html" "$HERE/run.mjs" "$WORK/"
-cp "$HERE/../../node_modules/mediabunny/dist/bundles/mediabunny.mjs" "$WORK/"
+# mediabunny n'est plus une dépendance (19/11/2026, §197) : ce banc l'emprunte, à la version que le
+# lecteur a utilisée, dans son propre dossier temporaire.
+docker run --rm -v "$WORK":/w -w /w node:26-alpine sh -c "npm pack -s mediabunny@1.62.1 >/dev/null && tar -xzf mediabunny-1.62.1.tgz && cp package/dist/bundles/mediabunny.mjs . && rm -rf package mediabunny-1.62.1.tgz"
 chmod -R a+rX "$WORK"
 docker run --rm -v "$WORK":/w -w /tmp -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 mcr.microsoft.com/playwright:v1.63.0-noble \
   sh -c "npm init -y >/dev/null && npm i -s playwright@1.63.0 >/dev/null 2>&1 && cp /w/run.mjs . && node run.mjs"

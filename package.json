@@ -14,13 +14,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.8.0",
-    "@mediabunny/ac3": "1.62.1",
-    "@mediabunny/dts": "1.62.1",
     "@wasm-audio-decoders/flac": "0.2.11",
     "better-sqlite3": "13.2.0",
     "hls.js": "1.7.4",
     "lucide-react": "1.73.0",
-    "mediabunny": "1.62.1",
     "next": "16.4.6",
     "react": "19.3.1",
     "react-dom": "19.3.1",

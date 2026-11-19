@@ -128,7 +128,7 @@ describe("contiguousAudio", () => {
 });
 
 describe("le décodeur logiciel", () => {
-  it("confie le TrueHD et le MLP à notre décodeur, pas à mediabunny qui ne les connaît pas", async () => {
+  it("confie le TrueHD et le MLP à leur propre décodeur (truehd/)", async () => {
     vi.resetModules();
     const opened: number[] = [];
     vi.doMock("@/lib/webcodecs/truehd/truehdAudio", () => ({

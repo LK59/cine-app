@@ -4,10 +4,6 @@ import { readFileSync } from "node:fs";
 // What the player's first « Lire » would otherwise download while the viewer waits. The modules
 // themselves are replaced by markers: importing one is the whole of what warming it means.
 const imported: string[] = [];
-vi.mock("mediabunny", () => (imported.push("mediabunny"), {}));
-vi.mock("@mediabunny/ac3", () => (imported.push("ac3"), {}));
-vi.mock("@mediabunny/dts", () => (imported.push("dts"), {}));
-vi.mock("@/lib/webcodecs/flacDecoder", () => (imported.push("flacDecoder"), {}));
 vi.mock("@wasm-audio-decoders/flac", () => (imported.push("libflac"), {}));
 vi.mock("@/lib/webcodecs/truehd/truehdDecoder", () => ({
   warmTrueHd: async () => void imported.push("truehd"),
@@ -30,8 +26,8 @@ const settle = async () => {
 };
 
 describe("scheduleDecoderWarmup", () => {
-  // Nos décodeurs (§197) : AC-3/E-AC3/DTS et TrueHD de FFmpeg, libFLAC — et rien de mediabunny, retiré
-  // le 19/11/2026 (ses modules sont encore doublés ici : un import qui reviendrait se verrait).
+  // Nos décodeurs (§197) : AC-3/E-AC3/DTS et TrueHD de FFmpeg, libFLAC. mediabunny, préchauffé jusqu'au
+  // 19/11/2026, n'est plus une dépendance.
   it("fetches every decoder the player may need, FLAC included — after the delay and not before", async () => {
     vi.stubGlobal("navigator", {});
     const { scheduleDecoderWarmup } = await import("@/lib/webcodecs/decoderWarmup");

@@ -129,11 +129,11 @@ const nextConfig = {
               // les navigateurs CSP3. On ne peut donc pas garder le hash du script d'accent
               // (layout.tsx:84) « au cas où » — sa seule présence casserait les 7 autres.
               //
-              // `'wasm-unsafe-eval'` et non `'unsafe-eval'` : les décodeurs AC-3 et DTS de
-              // mediabunny (@mediabunny/ac3, @mediabunny/dts, chargés en import dynamique par
-              // webcodecs/softwareAudio.ts:42-46) sont des portages Emscripten qui appellent
-              // WebAssembly.instantiate. Ils servent 72 % de cette bibliothèque et sur le
-              // chemin natif, pas seulement sur le repli — sans eux, un film joue sans son.
+              // `'wasm-unsafe-eval'` et non `'unsafe-eval'` : nos décodeurs AC-3/E-AC3/DTS, TrueHD et
+              // AAC (FFmpeg compilé par emscripten, webcodecs/ac3dts, truehd, aac — mediabunny
+              // jusqu'au 19/11/2026) et libFLAC appellent WebAssembly.instantiate. Ils servent 72 %
+              // de cette bibliothèque, sur le chemin natif et pas seulement sur le repli — sans eux,
+              // un film joue sans son.
               // Le mot-clé CSP3 autorise WebAssembly *sans* rouvrir eval().
               //
               // Aucun hôte YouTube depuis le 13/10/2026 : l'API iframe (bande-annonce de fond) a été
@@ -186,7 +186,8 @@ const nextConfig = {
               // blob: est obligatoire ici, et pour deux raisons plutôt qu'une : hls.js
               // construit son démultiplexeur depuis un Blob (injectWorker,
               // hls.js/dist/hls.js:15931, et PlayerHost.tsx ne désactive pas enableWorker), et
-              // les décodeurs mediabunny font de même pour le leur. 'self' couvre /sw.js.
+              // le worker de nos décodeurs FFmpeg naît d'un module en ligne (truehdDecoder.ts,
+              // `createHost`). 'self' couvre /sw.js.
               "worker-src 'self' blob:",
               "object-src 'none'",
               // Même verrou que le X-Frame-Options: DENY posé plus haut.

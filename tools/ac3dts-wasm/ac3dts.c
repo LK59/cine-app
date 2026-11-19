@@ -1,6 +1,7 @@
 // Les décodeurs AC-3, E-AC3 et DTS de FFmpeg (ac3dec, eac3dec, dcadec), exposés au JavaScript —
 // essai demux-son du 19/11/2026 : la même colle que tools/truehd-wasm/truehd.c, le codec choisi à
-// l'ouverture. Options par défaut du décodeur, comme @mediabunny/ac3 et /dts.
+// l'ouverture. Options par défaut du décodeur, comme @mediabunny/ac3 et /dts qu'il remplace (identique
+// à l'échantillon près sur la bibliothèque).
 //
 // Compilé en WebAssembly par build.sh ; le module produit est
 // src/lib/webcodecs/truehd/ac3dts-wasm.mjs. La sortie est rangée en flottants entrelacés, dans

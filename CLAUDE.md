@@ -154,17 +154,11 @@ Chromium user agent, and only the tracks meant to change may differ; `aac-census
 classes every AAC track of a library by `aacPlan`'s decision; `aac-pce-bench.spec.ts` checks the
 lossless PCE rewrite and writes the browser probe's files; `aac-wasm-bench.spec.ts` prints each
 channel's level through the WebAssembly AAC decoder, to compare with `ffmpeg astats`.
-`mediabunny-regress-bench.spec.ts` guards a mediabunny upgrade (`mediabunny`, `@mediabunny/ac3`,
-`@mediabunny/dts` move together, exact versions): per audio track, the tracks and durations
-mediabunny finds, the hash of 60 s of demuxed packets and of 60 s of decoded Float32 planes through
-`SoftwareAudioTrack.samples()` from 0 s and three seek points, and the hash of the audio segments
-the remuxer builds from them through a deterministic fake `AudioEncoder` (whose frames are the hash
-of the samples it was handed). Run it before and after on the same files (`MB_FILES`); every line
-except `ms` must be identical. Opus and PCE AAC are decoded by the browser, not in Node: for them
-only the demux is compared. `mediabunny-tail-scan.test.ts`, in the suite, guards the one regression
-that bench found in 1.62.0: a seek past the last frame of an audio track that ends before the file
-(a dub shorter than the credits, video-only Cues) re-read the whole file — 18.9 GB over HTTP for
-one film. A mediabunny upgrade does not pass while that test fails.
+`audio-ref-bench.spec.ts` is the reference for the decoded sound since mediabunny was removed (19/11/2026,
+DECISIONS §197): per audio track, the hash of the packets our reader returns and of 30 s of decoded Float32 planes
+through `SoftwareAudioTrack.samples()`, from 0 s, three seek points and the last minute. Run it before and after a
+change to the packet reader, a decoder module or libFLAC, on the same list; every line except `ms` must be identical.
+Its first reference was taken on the chain proved identical to the sample to mediabunny on 100 library tracks.
 `ffmpeg-wasm-regress-bench.spec.ts` guards both WebAssembly modules across an FFmpeg version change:
 per TrueHD/AAC track listed in `FFW_LIST`, the SHA-256 of the delivered floats and each channel's
 level, from 0 s, after two seeks and on a fresh decoder mid-film — run it with the old and the new
