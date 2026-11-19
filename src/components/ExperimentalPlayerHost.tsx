@@ -7,7 +7,6 @@ import type { NativeSubtitleSync } from "@/components/playerNative/useNativeSubt
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { playerBootstrapOptions } from "@/lib/swr";
-import { lumenAudioOn } from "@/lib/lumenAudio";
 import { watchFirstStreamRequest, type StreamRequestWatch } from "@/lib/streamRequestTiming";
 import { decodingFields } from "@/lib/webcodecs/decodingInfo";
 import { advanceTo, closePlayerSession } from "@/components/player/playerClose";
@@ -2423,8 +2422,6 @@ export function ExperimentalPlayerHost({
       audioTrackNumber: wantedAudioRef.current,
       // « Améliorer les dialogues », lu à cette ouverture — absent tant qu'il est désactivé.
       ...(openedDialogue !== "off" ? { dialogue: openedDialogue } : {}),
-      // « Son par Lumen » (essai demux-son, administrateurs) — absent tant qu'il est coupé.
-      ...(lumenAudioOn() ? { audioChain: "lumen" as const } : {}),
       // Reconstruit pour un changement de piste pendant une pause : rien ne doit le relancer, ni
       // ce composant (voir startRemux) ni la garde de démarrage de la source.
       startPaused: lifecycle.keepPaused,

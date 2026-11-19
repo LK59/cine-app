@@ -96,12 +96,10 @@ async function opened() {
   return { source, file, ac3, video };
 }
 
-const LUMEN = { demux: "nôtre", decoders: "nôtres" } as const;
-
 describe("chaîne « lumen » : notre worker AC-3/DTS en échec", () => {
   it("à l'ouverture : le décodé lève l'erreur du worker au lieu d'attendre pour toujours", async () => {
     const { source, file, ac3 } = await opened();
-    const track = await SoftwareAudioTrack.open(source, ac3.number, ac3.codecId, file, LUMEN);
+    const track = await SoftwareAudioTrack.open(source, ac3.number, ac3.codecId, file);
     await expect(within(track.samples(0).next())).rejects.toThrow(WORKER_ERROR);
     track.close();
   });
@@ -109,7 +107,7 @@ describe("chaîne « lumen » : notre worker AC-3/DTS en échec", () => {
   it("en plein film : le décodé s'arrête sur l'erreur nommée, pas sur un silence sans fin", async () => {
     failure.at = "decode";
     const { source, file, ac3 } = await opened();
-    const track = await SoftwareAudioTrack.open(source, ac3.number, ac3.codecId, file, LUMEN);
+    const track = await SoftwareAudioTrack.open(source, ac3.number, ac3.codecId, file);
     const read = async () => {
       let blocks = 0;
       for await (const block of track.samples(0)) blocks += block.planes.length > 0 ? 1 : 0;
@@ -125,7 +123,7 @@ describe("chaîne « lumen » : notre worker AC-3/DTS en échec", () => {
     let caught: unknown = null;
     try {
       await within(
-        choosePlaybackPath({ source, file, videoTrack: video, audioTrack: ac3, dimensions: { width: 1920, height: 1080 }, startSeconds: 0, remux: { audioChain: "lumen" } })
+        choosePlaybackPath({ source, file, videoTrack: video, audioTrack: ac3, dimensions: { width: 1920, height: 1080 }, startSeconds: 0 })
       );
     } catch (error) {
       caught = error;

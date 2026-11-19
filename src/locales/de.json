@@ -2543,8 +2543,6 @@
       "interfaceAuto": "Automatisch",
       "interfaceTouch": "Touch",
       "interfaceDesktop": "Computer",
-      "lumenAudio": "Ton durch Lumen",
-      "lumenAudioHint": "Für alle eingeschaltet. Ausgeschaltet nutzt dieses Konto wieder die bisherige Dekodierung (mediabunny), zum Vergleich. Gilt ab dem nächsten Film.",
       "guidedScroll": "Geführtes Scrollen",
       "guidedScrollHint": "Am Computer rastet die Startseite auf eine ganze Reihe und die Titelseiten auf eine ganze Seite ein. Aus: Die Seite scrollt frei.",
       "showBooks": "Bücher anzeigen",

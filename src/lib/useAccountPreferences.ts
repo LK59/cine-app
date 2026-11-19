@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { isPublicPath } from "@/lib/publicPaths";
 import { fetcher, playerBootstrapOptions } from "@/lib/swr";
-import { rememberLumenAudio } from "@/lib/lumenAudio";
 
 /**
  * Le chargeur des préférences du compte (`/api/user/preferences`) : langue, défilement guidé,
@@ -73,9 +72,4 @@ export function useAccountPreferencesLoader(): void {
     if (!onPublicPath && data === undefined && error === undefined && !isValidating) void mutate();
   }, [onPublicPath, data, error, isValidating, mutate]);
 
-  // « Son par Lumen » (lumenAudio.ts) : le lecteur le lit hors de React, sur le miroir de l'appareil.
-  // Recopié à chaque réponse ; absent de la réponse (compte qui n'est pas administrateur), allumé.
-  useEffect(() => {
-    if (data && typeof data === "object") rememberLumenAudio((data as { lumenAudio?: boolean }).lumenAudio !== false);
-  }, [data]);
 }

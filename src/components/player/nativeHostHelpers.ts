@@ -5,7 +5,6 @@ import { warmNextEpisode } from "@/lib/nextEpisodeWarmup";
 import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
 import { takeAacDecodeRoute, takeTrueHdThread } from "@/lib/webcodecs/softwareAudio";
 import { takeLumenFacts } from "@/lib/webcodecs/lumenFacts";
-import { lumenAudioOn } from "@/lib/lumenAudio";
 import { audioLeadGapFields, type AudioLeadGap } from "@/lib/webcodecs/audioLeadGap";
 import type { SeekTiming } from "@/lib/hostSeek";
 import type { SeekServed } from "@/lib/webcodecs/mseTypes";
@@ -60,14 +59,12 @@ export function trueHdThreadFacts(): Record<string, unknown> {
 }
 
 /**
- * « Son par Lumen » (§197, pour tous depuis 10.63.0) : `lumenDecoder` (« ffmpeg-7.1.5-eac3 », « flac »,
- * « navigateur »…) et le fil (`lumenThread`, `lumenWorkerError`) quand une piste décodée a pris ce
- * chemin — de quoi attribuer un repli au lecteur serveur. `audioChain: "mediabunny"` pour un
- * administrateur qui l'a coupé pour comparer. Rien pour une piste copiée telle quelle.
+ * Le son décodé par Lumen (§197) : `lumenDecoder` (« ffmpeg-7.1.5-eac3 », « flac », « navigateur »…) et le
+ * fil (`lumenThread`, `lumenWorkerError`) quand une piste décodée a pris ce chemin — de quoi attribuer un
+ * repli au lecteur serveur. Rien pour une piste copiée telle quelle.
  */
 export function lumenAudioFacts(): Record<string, unknown> {
   const facts = takeLumenFacts();
-  if (!lumenAudioOn()) return { audioChain: "mediabunny" };
   return {
     ...(facts ? { lumenDecoder: facts.decoder } : {}),
     ...(facts?.thread ? { lumenThread: facts.thread } : {}),

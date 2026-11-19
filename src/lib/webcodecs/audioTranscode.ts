@@ -122,7 +122,7 @@ const DECODABLE_HERE = new Set([
   "A_MLP",
   // A_OPUS aussi, en mono et en stéréo seulement — voir transcodableAudio. Safari décode l'Opus
   // mais ne le prend pas dans MediaSource : 608 pistes de séries ici. Décodé par le navigateur
-  // lui-même (mediabunny passe par son AudioDecoder), ré-encodé en AAC. Au-delà de deux canaux,
+  // lui-même (son AudioDecoder, ownAudio.ts), ré-encodé en AAC. Au-delà de deux canaux,
   // l'ordre dans lequel le décodeur d'Apple rend un Opus multicanal n'a jamais été mesuré : ces
   // pistes (76, en 3.0) gardent leur chemin d'avant plutôt qu'un pari sur la place des voix.
 ]);
@@ -146,8 +146,8 @@ export function audioDecoderExists(track: MatroskaTrack): boolean {
 export function transcodableAudio(track: MatroskaTrack): boolean {
   if (track.codecId === "A_OPUS") return (track.audio?.channels ?? 2) <= 2;
   // L'AAC se copie partout — sauf un PCE que ce navigateur ne prend pas et qu'aucune configuration
-  // standard ne décrit (DECISIONS.md §62) : décodé par l'AudioDecoder du navigateur, via
-  // mediabunny, comme l'Opus.
+  // standard ne décrit (DECISIONS.md §62) : décodé par l'AudioDecoder du navigateur, comme l'Opus
+  // (ownAudio.ts).
   if (track.codecId === "A_AAC") return aacPlan(track.codecPrivate, { pceAccepted: effectivePceAnswer(track.codecPrivate) }).action === "decode";
   return DECODABLE_HERE.has(track.codecId);
 }
@@ -574,9 +574,7 @@ export class AudioTranscoder {
      * après l'image (DECISIONS.md §148). Comme pour « Améliorer les dialogues », un AAC multicanal
      * passe alors par le décodeur dont l'ordre des canaux est mesuré.
      */
-    copiedTrack = false,
-    /** L'essai « lumen » (`RemuxOptions.audioChain`) : nos paquets et nos décodeurs. */
-    audioChain?: "lumen"
+    copiedTrack = false
   ): Promise<AudioTranscoder> {
     const Encoder = (globalThis as { AudioEncoder?: typeof AudioEncoder }).AudioEncoder;
     if (!Encoder) throw new Error("Ce navigateur ne sait pas encoder de l'audio.");
@@ -588,10 +586,7 @@ export class AudioTranscoder {
     // promesse de `dialogueCanShape`, qui décide des deux.
     const measuredAacDecoder = ((!!dialogue && dialogue !== "off") || copiedTrack) && track.codecId === "A_AAC" && (track.audio?.channels ?? 2) > 2;
     // Lue sous le nom « son » : la fenêtre d'un saut dit ce que ce décodeur demande à côté du lecteur (`readingAs`).
-    const decoder = await SoftwareAudioTrack.open(readingAs(source, "son"), track.number, track.codecId, file, {
-      ...(measuredAacDecoder ? { measuredAacDecoder } : {}),
-      ...(audioChain === "lumen" ? { demux: "nôtre" as const, decoders: "nôtres" as const } : {}),
-    });
+    const decoder = await SoftwareAudioTrack.open(readingAs(source, "son"), track.number, track.codecId, file, measuredAacDecoder ? { measuredAacDecoder } : {});
     // Tout ce qui suit peut lever — l'amorçage qui échoue sur le décodeur, une description que
     // l'on ne sait pas relire —, et le décodeur (pour le TrueHD, un contexte WebAssembly) comme
     // l'encodeur amorcé n'ont encore aucun propriétaire : fermés ici, sur chaque sortie en erreur.

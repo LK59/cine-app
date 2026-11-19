@@ -26,7 +26,7 @@ describe("« Son par Lumen » sans mediabunny", () => {
     const source = new MemoryByteSource(new Uint8Array(readFileSync("src/__tests__/fixtures/mp4/c-hevc-multi.mkv")));
     const file = await openMediaFile(source);
     const ac3 = file.tracks.find((t) => t.codecId === "A_AC3")!;
-    const track = await SoftwareAudioTrack.open(source, ac3.number, ac3.codecId, file, { demux: "nôtre", decoders: "nôtres" });
+    const track = await SoftwareAudioTrack.open(source, ac3.number, ac3.codecId, file);
     let frames = 0;
     for await (const block of track.samples(0)) frames += block.planes[0]?.length ?? 0;
     track.close();

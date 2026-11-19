@@ -332,12 +332,6 @@ export interface RemuxOptions {
    * traitement des voix ait les échantillons entre les mains.
    */
   dialogue?: DialogueMode;
-  /**
-   * Essai du 19/11/2026 (audioDemux.ts) : « lumen », le son décodé lu par notre lecteur de conteneur
-   * et décodé par notre FFmpeg 7.1.5 (AC-3, E-AC3, DTS) — mediabunny ne garde que l'Opus et l'AAC
-   * refusés, par l'AudioDecoder du navigateur. Absent : le chemin d'avant, à l'octet près.
-   */
-  audioChain?: "lumen";
 }
 
 /** Ce que les fonctions de plan lisent des options : la livraison, et le traitement des voix. */
@@ -863,7 +857,7 @@ export class Remuxer {
      */
     private readonly dolbyVisionCodec: string | null = null,
     /** Les options de son ouverture, à lui seul — voir `RemuxOptions`. */
-    private readonly settings: { perTrack: boolean; lightCapNits: number | null; dialogue: DialogueMode; audioChain?: "lumen" } = {
+    private readonly settings: { perTrack: boolean; lightCapNits: number | null; dialogue: DialogueMode } = {
       perTrack: DEFAULT_PER_TRACK,
       lightCapNits: null,
       dialogue: "off",
@@ -893,7 +887,7 @@ export class Remuxer {
     startSeconds = 0,
     options: RemuxOptions = {}
   ): Promise<Remuxer> {
-    const settings = { perTrack: perTrackOf(options), lightCapNits: options.lightCapNits ?? null, dialogue: options.dialogue ?? ("off" as DialogueMode), audioChain: options.audioChain };
+    const settings = { perTrack: perTrackOf(options), lightCapNits: options.lightCapNits ?? null, dialogue: options.dialogue ?? ("off" as DialogueMode) };
     if (!remuxableVideo(videoTrack)) throw new Error(`Vidéo non remultiplexable : ${videoTrack.codecId}`);
     if (audioTrack && !playableAudio(audioTrack)) throw new Error(`Audio non remultiplexable : ${audioTrack.codecId}`);
 
@@ -903,7 +897,7 @@ export class Remuxer {
     // and the encoder — not the file — is then what describes it.
     let transcoder =
       audioTrack && delivery === "transcode"
-        ? await AudioTranscoder.open(source, audioTrack, startSeconds, unifiedAudioChannels(file, settings) ?? undefined, file, settings.dialogue, false, settings.audioChain)
+        ? await AudioTranscoder.open(source, audioTrack, startSeconds, unifiedAudioChannels(file, settings) ?? undefined, file, settings.dialogue)
         : null;
     if (transcoder) assertContainerTakes(transcoder);
     // Une piste déjà ré-encodée (le DTS partout, le Dolby sur Chrome) : le transcodeur comble le trou
@@ -944,7 +938,7 @@ export class Remuxer {
             : `son en retard : la piste ${audioTrack.number} commence tard dans ce fichier (vu plus tôt sur cette page) — ré-encodée pour pouvoir y revenir`
         );
         try {
-          transcoder = await AudioTranscoder.open(source, audioTrack, startSeconds, unifiedAudioChannels(file, settings) ?? undefined, file, settings.dialogue, true, settings.audioChain);
+          transcoder = await AudioTranscoder.open(source, audioTrack, startSeconds, unifiedAudioChannels(file, settings) ?? undefined, file, settings.dialogue, true);
           assertContainerTakes(transcoder);
           decodesCopiedTrack = true;
           leadGap = { gapS, action: "silence" };
@@ -1494,7 +1488,7 @@ export class Remuxer {
     const previous = this.transcoder;
     let next: AudioTranscoder;
     try {
-      next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file, this.settings) ?? undefined, this.file, this.settings.dialogue, this.decodesCopiedTrack, this.settings.audioChain);
+      next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file, this.settings) ?? undefined, this.file, this.settings.dialogue, this.decodesCopiedTrack);
     } catch (error) {
       // Une lecture coupée par un saut n'est pas un échec de l'encodeur : elle ne compte pas dans
       // le budget de reconstructions — sans quoi quelques sauts pendant une panne d'encodeur

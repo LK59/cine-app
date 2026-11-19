@@ -1,6 +1,5 @@
 "use client";
 
-import { lumenAudioOn } from "@/lib/lumenAudio";
 
 // Le préchauffage des décodeurs du lecteur — un module à part, et atteint seulement derrière une
 // frontière `ssr: false` (`DecoderWarmup`, `PlayerOnboarding`).
@@ -13,8 +12,8 @@ import { lumenAudioOn } from "@/lib/lumenAudio";
 // du serveur.
 
 /**
- * Les décodeurs du lecteur, avant le premier film : mediabunny et ses extensions AC-3 et DTS,
- * libFLAC et le TrueHD de FFmpeg depuis le 21/09/2026 — ~900 Ko compressés, que le premier « Lire » d'un fichier au
+ * Les décodeurs du lecteur, avant le premier film : libFLAC et les modules de FFmpeg (AC-3/E-AC3/DTS
+ * et TrueHD, avec leur worker) — mediabunny et ses extensions jusqu'au 19/11/2026 (§197) — ~900 Ko compressés, que le premier « Lire » d'un fichier au
  * son exotique téléchargeait sinon, pendant que le spectateur attendait.
  *
  * Tous les trois, sur tous les appareils, même l'iPhone qui lit l'AC-3 tel quel : un fichier qui
@@ -30,19 +29,10 @@ export function warmPlayerDecoders(): void {
   try {
     const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
     if (connection?.saveData) return;
-    // « Son par Lumen » (§197) : nos décodeurs AC-3/E-AC3/DTS et libFLAC, et rien de mediabunny.
-    if (lumenAudioOn()) {
-      void import("@wasm-audio-decoders/flac").catch(() => {});
-      void import("@/lib/webcodecs/truehd/truehdDecoder").then((m) => Promise.all([m.warmAc3Dts(), m.warmTrueHd()])).catch(() => {});
-      return;
-    }
-    void import("mediabunny").catch(() => {});
-    void import("@mediabunny/ac3").catch(() => {});
-    void import("@mediabunny/dts").catch(() => {});
-    void import("@/lib/webcodecs/flacDecoder").catch(() => {});
+    // Nos décodeurs (§197) : libFLAC, et les modules AC-3/E-AC3/DTS et TrueHD de FFmpeg avec leur worker,
+    // téléchargés sans être exécutés.
     void import("@wasm-audio-decoders/flac").catch(() => {});
-    // Le module TrueHD, téléchargé et non instancié : le premier film en TrueHD le trouve en cache.
-    void import("@/lib/webcodecs/truehd/truehdDecoder").then((m) => m.warmTrueHd()).catch(() => {});
+    void import("@/lib/webcodecs/truehd/truehdDecoder").then((m) => Promise.all([m.warmAc3Dts(), m.warmTrueHd()])).catch(() => {});
   } catch {
     // Un préchauffage n'a jamais le droit de devenir une panne.
   }

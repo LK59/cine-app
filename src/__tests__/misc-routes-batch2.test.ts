@@ -20,8 +20,6 @@ const mockUserPrefsDb = {
   setShowBooks: vi.fn(),
   getShowRecap: vi.fn(() => true),
   setShowRecap: vi.fn(),
-  getLumenAudio: vi.fn(() => false),
-  setLumenAudio: vi.fn(),
 };
 const mockSessionDb = { countOthers: vi.fn(), deleteOthers: vi.fn(), listOthers: vi.fn(() => []), find: vi.fn((): unknown => null) };
 vi.mock("@/lib/db", () => ({
@@ -209,21 +207,6 @@ describe("/api/user/preferences", () => {
     expect(res.status).toBe(200);
     expect(mockUserPrefsDb.setShowRecap).toHaveBeenCalledWith("jf-3", false);
     expect(mockUserPrefsDb.setShowBooks).not.toHaveBeenCalled();
-    expect(mockUserPrefsDb.setLang).not.toHaveBeenCalled();
-  });
-
-  // « Son par Lumen » (essai demux-son, 19/11/2026) : administrateurs seulement — absent de la réponse
-  // d'un compte ordinaire, et refusé à l'écriture. Le proxy laisse passer cette route pour tous.
-  it("« Son par Lumen » : lu et écrit par un administrateur, inexistant pour un autre compte", async () => {
-    const { GET, PUT } = await import("@/app/api/user/preferences/route");
-    mockVerifySessionFull.mockResolvedValue({ u: "emma", jfId: "jf-3", role: "user" });
-    expect((await (await GET(fakeReq())).json()).lumenAudio).toBeUndefined();
-    expect((await PUT(fakeReq({ body: { lumenAudio: true } }))).status).toBe(403);
-    expect(mockUserPrefsDb.setLumenAudio).not.toHaveBeenCalled();
-    mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-1", role: "admin" });
-    expect((await (await GET(fakeReq())).json()).lumenAudio).toBe(false);
-    expect((await PUT(fakeReq({ body: { lumenAudio: true } }))).status).toBe(200);
-    expect(mockUserPrefsDb.setLumenAudio).toHaveBeenCalledWith("jf-1", true);
     expect(mockUserPrefsDb.setLang).not.toHaveBeenCalled();
   });
 

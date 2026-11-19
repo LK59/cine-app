@@ -2543,8 +2543,6 @@
       "interfaceAuto": "Automatic",
       "interfaceTouch": "Touch",
       "interfaceDesktop": "Computer",
-      "lumenAudio": "Sound by Lumen",
-      "lumenAudioHint": "On for everyone. Off, this account goes back to the previous decoding (mediabunny), to compare. Applies from the next film.",
       "guidedScroll": "Guided scrolling",
       "guidedScrollHint": "On a computer, the home screen settles on a whole row and title pages on a whole page. Off, pages scroll freely.",
       "showBooks": "Show books",

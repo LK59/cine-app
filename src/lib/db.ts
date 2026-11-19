@@ -311,7 +311,8 @@ function migrate(db: Database.Database): void {
   try { db.exec("ALTER TABLE user_preferences ADD COLUMN show_books INTEGER"); } catch { /* already exists */ }
   // « Précédemment » (DECISIONS.md §137) : NULL = oui, 0 = ce compte n'en veut pas — ni affiché, ni préparé.
   try { db.exec("ALTER TABLE user_preferences ADD COLUMN show_recap INTEGER"); } catch { /* already exists */ }
-  // « Son par Lumen » (essai demux-son, 19/11/2026) : administrateurs seulement, coupé par défaut.
+  // « Son par Lumen » (19/11/2026) : l'interrupteur des administrateurs, sans objet depuis le retrait de
+  // mediabunny (§197). La colonne reste : SQLite ne la retire pas sans recopier la table, et rien ne la lit.
   try { db.exec("ALTER TABLE user_preferences ADD COLUMN lumen_audio INTEGER"); } catch { /* already exists */ }
   // La colonne a existé le temps d'une version qui révoquait le jeton Jellyfin en même temps que
   // la session. Ce n'est plus le cas — se déconnecter de Cine App ne doit pas toucher à Jellyfin —
@@ -1382,24 +1383,6 @@ export const userPrefsDb = {
       .prepare("SELECT show_recap FROM user_preferences WHERE user_id = ?")
       .get(userId) as { show_recap: number | null } | undefined;
     return row?.show_recap !== 0;
-  },
-
-  /** « Son par Lumen » (§197) : allumé tant qu'un administrateur ne l'a pas coupé pour comparer. */
-  getLumenAudio(userId: string): boolean {
-    const row = getDb()
-      .prepare("SELECT lumen_audio FROM user_preferences WHERE user_id = ?")
-      .get(userId) as { lumen_audio: number | null } | undefined;
-    return row?.lumen_audio !== 0;
-  },
-
-  setLumenAudio(userId: string, on: boolean): void {
-    getDb().prepare(`
-      INSERT INTO user_preferences (user_id, lang, lumen_audio, updated_at)
-      VALUES (?, NULL, ?, ?)
-      ON CONFLICT (user_id) DO UPDATE SET
-        lumen_audio = excluded.lumen_audio,
-        updated_at = excluded.updated_at
-    `).run(userId, on ? 1 : 0, Date.now());
   },
 
   setShowRecap(userId: string, on: boolean): void {

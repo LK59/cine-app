@@ -4,8 +4,7 @@ import { useSignOut } from "@/components/offline/useSignOut";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet, TabletSmartphone, BookOpen, History, PictureInPicture2, AudioLines } from "lucide-react";
-import { useLumenAudio, setLumenAudio } from "@/lib/lumenAudio";
+import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet, TabletSmartphone, BookOpen, History, PictureInPicture2 } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { LOCALES, LOCALE_LABELS, getDateLocale, type Locale } from "@/lib/i18n";
@@ -100,24 +99,6 @@ function Row({ icon: Icon, title, hint, children }: { icon: React.ElementType; t
       </div>
       {children && <div className="flex shrink-0 items-center">{children}</div>}
     </div>
-  );
-}
-
-/**
- * « Son par Lumen » (essai demux-son, 19/11/2026) : le son que le navigateur ne lit pas lu par notre
- * lecteur et décodé par notre FFmpeg, au lieu de mediabunny. Une préférence du compte, administrateurs
- * seulement (la route refuse les autres) ; prise en compte au prochain film ouvert.
- */
-function LumenAudioSection() {
-  const t = useT();
-  const toast = useToast();
-  const on = useLumenAudio();
-  return (
-    <Section>
-      <Row icon={AudioLines} title={t("player.account.lumenAudio")} hint={t("player.account.lumenAudioHint")}>
-        <Toggle checked={on} ariaLabel={t("player.account.lumenAudio")} onChange={(next) => void setLumenAudio(next).catch(() => toast.error(t("common.error")))} />
-      </Row>
-    </Section>
   );
 }
 
@@ -282,7 +263,6 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
                 </>
               }
             />
-            <LumenAudioSection />
             <Section icon={SlidersHorizontal} title={t("player.nav.manage")}>
               <a href="/gestion" className="btn btn-ghost w-full justify-center sm:w-auto">
                 <SlidersHorizontal size={16} />

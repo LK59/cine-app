@@ -201,40 +201,22 @@ describe("ouvrir une piste sans relire le fichier", () => {
     track.close();
   });
 
-  it("mediabunny lit un fichier une fois pour toutes ses pistes", async () => {
-    // 1,6 s pour ouvrir l'E-AC3 de Braveheart, à chaque changement de langue : un lecteur de
-    // conteneur neuf par piste, qui relisait tout.
-    vi.resetModules();
-    let created = 0;
-    vi.doMock("mediabunny", () => {
-      class Input {
-        constructor() {
-          created++;
-        }
-        async getAudioTracks() {
-          return [2, 3].map((id) => ({ id, codec: "eac3", sampleRate: 48000, numberOfChannels: 6, canDecode: async () => true }));
-        }
-      }
-      class AudioSampleSink {}
-      class CustomSource {}
-      class MatroskaInputFormat {}
-      return { Input, AudioSampleSink, CustomSource, MatroskaInputFormat };
-    });
-    vi.doMock("@mediabunny/ac3", () => ({ registerAc3Decoder: () => {} }));
-    try {
-      const { SoftwareAudioTrack } = await import("@/lib/webcodecs/softwareAudio");
-      const film = { size: 1, read: async () => new Uint8Array(0), close: () => {} };
-      const autre = { size: 1, read: async () => new Uint8Array(0), close: () => {} };
-      (await SoftwareAudioTrack.open(film, 2, "A_EAC3")).close();
-      (await SoftwareAudioTrack.open(film, 3, "A_EAC3")).close();
-      (await SoftwareAudioTrack.open(film, 2, "A_EAC3")).close();
-      expect(created).toBe(1);
-      // Un autre film, un autre lecteur : rien ne se mélange entre deux lectures.
-      (await SoftwareAudioTrack.open(autre, 2, "A_EAC3")).close();
-      expect(created).toBe(2);
-    } finally {
-      vi.doUnmock("mediabunny");
-      vi.doUnmock("@mediabunny/ac3");
-    }
+  it("ouvrir une piste ne relit ni l'en-tête ni l'index : ceux du lecteur suffisent (§197)", async () => {
+    // 1,6 s pour ouvrir l'E-AC3 de Braveheart, à chaque changement de langue, du temps où chaque piste
+    // avait son propre lecteur de conteneur (21/09/2026) ; puis un par fichier (mediabunny, jusqu'au
+    // 19/11/2026). Aujourd'hui, la piste lit les paquets avec le lecteur et l'index du film.
+    const { readFileSync } = await import("node:fs");
+    const { MemoryByteSource } = await import("@/lib/webcodecs/byteSource");
+    const { openMediaFile } = await import("@/lib/webcodecs/mediaFile");
+    const { SoftwareAudioTrack } = await import("@/lib/webcodecs/softwareAudio");
+    const inner = new MemoryByteSource(new Uint8Array(readFileSync("src/__tests__/fixtures/mp4/c-hevc-multi.mkv")));
+    let reads = 0;
+    const source = { size: inner.size, read: (o: number, l: number) => (reads++, inner.read(o, l)), close: () => {} };
+    const file = await openMediaFile(source);
+    const ac3 = file.tracks.find((t) => t.codecId === "A_AC3")!;
+    reads = 0;
+    const track = await SoftwareAudioTrack.open(source, ac3.number, ac3.codecId, file);
+    expect(reads).toBe(0);
+    track.close();
   });
 });

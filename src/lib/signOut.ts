@@ -12,7 +12,6 @@ import { clearResumeStore } from "@/lib/resumeCache/store";
 import { forgetSearches } from "@/lib/recentSearches";
 import { forgetHomeLayoutMirror } from "@/lib/useHomeLayout";
 import { forgetGuidedScrollMirror } from "@/lib/guidedScroll";
-import { forgetLumenAudioMirror } from "@/lib/lumenAudio";
 import { dropPushOnSignOut } from "@/lib/pushOnSignOut";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 import { forgetOfflineAccount } from "@/lib/offline/offlineEntry";
@@ -82,7 +81,6 @@ export async function forgetAccountOnDevice(budgetMs: number): Promise<void> {
   // (audit du 08/10/2026).
   step(forgetHomeLayoutMirror);
   step(forgetGuidedScrollMirror);
-  step(forgetLumenAudioMirror);
   // « Jusqu'ici » lu et préparé, les faits des personnes d'« À l'écran » (10.28.1) : ce que ce compte a vu, et
   // ses titres dans la bibliothèque — le compte suivant dans le même onglet les lisait sans requête.
   step(forgetAskClient);

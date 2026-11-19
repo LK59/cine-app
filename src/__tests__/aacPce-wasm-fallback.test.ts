@@ -31,34 +31,44 @@ const DIR = "src/__tests__/fixtures/aac";
 /** L R C LFE Ls Rs : le sinus que chaque rang doit porter, dans l'ordre standard. */
 const TONES = [440, 660, 880, 55, 1320, 1760];
 
-// L'AudioDecoder du navigateur passe par mediabunny ; Node n'en a pas. Le module est remplacé par
-// un double dont on règle la réponse : la piste acceptée (Chromium décode lui-même) ou refusée.
+// L'AudioDecoder du navigateur : Node n'en a pas. Un double dont on règle la réponse — la piste
+// acceptée (Chromium décode lui-même) ou refusée —, interrogé et nourri par ownAudio.ts (§197 ;
+// jusqu'au 19/11/2026, par mediabunny).
 const browser = vi.hoisted(() => ({ accepts: true, opened: 0 }));
-vi.mock("mediabunny", () => {
-  class Format {}
-  class Input {
-    constructor() {
-      browser.opened++;
-    }
-    async getAudioTracks() {
-      return [{ id: 1, codec: "aac", numberOfChannels: 6, sampleRate: 48000, canDecode: async () => browser.accepts }];
-    }
+class FakeAudioDecoder extends EventTarget {
+  static async isConfigSupported(config: unknown) {
+    browser.opened++;
+    return { supported: browser.accepts, config };
   }
-  class CustomSource {}
-  class AudioSampleSink {
-    async *samples() {
-      yield {
-        numberOfChannels: 6,
-        numberOfFrames: 1,
-        sampleRate: 48000,
-        timestamp: 0,
-        copyTo: (destination: Float32Array, options: { planeIndex: number }) => destination.set([options.planeIndex]),
-        close: () => {},
-      };
-    }
+  state = "unconfigured";
+  decodeQueueSize = 0;
+  constructor(private readonly init: { output: (data: unknown) => void; error: (e: unknown) => void }) {
+    super();
   }
-  return { Input, CustomSource, AudioSampleSink, MatroskaInputFormat: Format, Mp4InputFormat: Format };
-});
+  configure() {
+    this.state = "configured";
+  }
+  decode(chunk: { timestamp: number }) {
+    this.init.output({
+      numberOfChannels: 6,
+      numberOfFrames: 1,
+      sampleRate: 48000,
+      timestamp: chunk.timestamp,
+      copyTo: (destination: Float32Array, options: { planeIndex: number }) => destination.set([options.planeIndex]),
+      close: () => {},
+    });
+  }
+  async flush() {}
+  close() {
+    this.state = "closed";
+  }
+}
+class FakeEncodedAudioChunk {
+  timestamp: number;
+  constructor(init: { timestamp: number }) {
+    this.timestamp = init.timestamp;
+  }
+}
 
 // Le stockage du navigateur, où le refus d'une forme est retenu : Node n'en a pas par défaut.
 const stored = new Map<string, string>();
@@ -115,6 +125,8 @@ function dominantTones(planes: Float32Array[]): number[] {
 
 beforeEach(() => {
   vi.stubGlobal("localStorage", storage);
+  vi.stubGlobal("AudioDecoder", FakeAudioDecoder);
+  vi.stubGlobal("EncodedAudioChunk", FakeEncodedAudioChunk);
   browser.accepts = true;
   browser.opened = 0;
   takeAacDecodeRoute();

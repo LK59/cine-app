@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import type { AudioSample } from "mediabunny";
-import { __testing, streamInfoHeader } from "@/lib/webcodecs/flacDecoder";
+import { streamInfoHeader } from "@/lib/webcodecs/flacHeader";
+import { __testing } from "@/lib/webcodecs/ownAudio";
+import type { RawFrame } from "@/lib/webcodecs/audioDemux";
 
 const hex = (s: string) => new Uint8Array(s.match(/../g)!.map((b) => parseInt(b, 16)));
 
@@ -12,62 +13,52 @@ const STREAMINFO = hex(
 );
 const FRAME = hex("fff8ba18001801000901000785db");
 
-/** Wired the way mediabunny wires a registered decoder (media-sink.js). */
-async function decoder(description: Uint8Array | undefined) {
-  const samples: AudioSample[] = [];
-  const instance = new __testing.FlacDecoder();
-  Object.assign(instance, {
-    codec: "flac",
-    config: { codec: "flac", sampleRate: 48000, numberOfChannels: 2, description },
-    onSample: (sample: AudioSample) => samples.push(sample),
-  });
-  await instance.init();
-  return { instance, samples };
+/**
+ * Notre ouvreur FLAC (ownAudio.ts, §197), branché comme `decodedFrom` le branche. Jusqu'au 19/11/2026
+ * c'était un décodeur enregistré auprès de mediabunny (flacDecoder.ts) : mêmes trames, mêmes attentes.
+ */
+async function decoder(description: Uint8Array | ArrayBuffer | undefined) {
+  const samples: RawFrame[] = [];
+  const onError = vi.fn();
+  const config = { codec: "flac", sampleRate: 48000, numberOfChannels: 2, ...(description ? { description } : {}) } as AudioDecoderConfig;
+  const instance = await __testing.flacOpener(config)((frame) => samples.push(frame), onError);
+  return { instance, samples, onError };
 }
+const packet = (data: Uint8Array, timestamp: number) => ({ data, timestamp, duration: 2048 / 48000 });
 
-describe("FlacDecoder", () => {
-  it("claims FLAC and nothing else", () => {
-    expect(__testing.FlacDecoder.supports("flac")).toBe(true);
-    expect(__testing.FlacDecoder.supports("dts")).toBe(false);
-  });
-
+describe("décodeur FLAC (libFLAC)", () => {
   it("decodes a real frame to the exact samples, each channel in its place", async () => {
     // On 21/09/2026 Safari turned *Stand by Me*'s FLAC track away and the film went to the
     // server player. Before this decoder, nothing here could read FLAC at all.
     const { instance, samples } = await decoder(STREAMINFO);
-    await instance.decode({ data: FRAME, timestamp: 12.5 } as never);
+    await instance.decode(packet(FRAME, 12.5));
     expect(samples).toHaveLength(1);
     const sample = samples[0];
-    expect(sample.numberOfChannels).toBe(2);
-    expect(sample.numberOfFrames).toBe(2048);
+    expect(sample.planes).toHaveLength(2);
+    expect(sample.planes[0].length).toBe(2048);
     expect(sample.sampleRate).toBe(48000);
     // The packet's own time, not a count restarted at zero: after a seek that is all there is.
     expect(sample.timestamp).toBe(12.5);
-    const left = new Float32Array(2048);
-    const right = new Float32Array(2048);
-    sample.copyTo(left, { planeIndex: 0, format: "f32-planar" });
-    sample.copyTo(right, { planeIndex: 1, format: "f32-planar" });
+    const [left, right] = sample.planes;
     // Within 1e-4, not exactly: the decoder scales 16-bit samples by 32 767 where ffmpeg uses
     // 32 768 — a gain of 0.0003 dB, which is why the real files matched ffmpeg to 0.01 dB.
     for (const value of left) expect(value).toBeCloseTo(0.25, 4);
     for (const value of right) expect(value).toBeCloseTo(-0.5, 4);
-    await instance.close();
+    instance.close();
   });
 
   it("reads the header from a bare buffer and from a view into a larger one alike", async () => {
-    // mediabunny hands the description either way. Told apart by ArrayBuffer.isView since TS 7's
+    // A description may come either way (WebCodecs allows both). Told apart by ArrayBuffer.isView since TS 7's
     // typings (AllowSharedBufferSource): an offset view read from its start would hand libFLAC the
     // bytes before the header.
     const padded = new Uint8Array(STREAMINFO.length + 7);
     padded.set(STREAMINFO, 5);
     for (const description of [STREAMINFO.slice().buffer, padded.subarray(5, 5 + STREAMINFO.length)]) {
       const { instance, samples } = await decoder(description as never);
-      await instance.decode({ data: FRAME, timestamp: 0 } as never);
+      await instance.decode(packet(FRAME, 0));
       expect(samples).toHaveLength(1);
-      const left = new Float32Array(2048);
-      samples[0].copyTo(left, { planeIndex: 0, format: "f32-planar" });
-      for (const value of left) expect(value).toBeCloseTo(0.25, 4);
-      await instance.close();
+      for (const value of samples[0].planes[0]) expect(value).toBeCloseTo(0.25, 4);
+      instance.close();
     }
   });
 
@@ -83,12 +74,10 @@ describe("FlacDecoder", () => {
     streaminfo[4] &= 0x7f; // no longer the last block
     const header = new Uint8Array([...streaminfo, ...tags, ...padding]);
     const { instance, samples } = await decoder(header);
-    await instance.decode({ data: FRAME, timestamp: 0 } as never);
+    await instance.decode(packet(FRAME, 0));
     expect(samples).toHaveLength(1);
-    const left = new Float32Array(2048);
-    samples[0].copyTo(left, { planeIndex: 0, format: "f32-planar" });
-    for (const value of left) expect(value).toBeCloseTo(0.25, 4);
-    await instance.close();
+    for (const value of samples[0].planes[0]) expect(value).toBeCloseTo(0.25, 4);
+    instance.close();
   });
 });
 
@@ -117,20 +106,14 @@ describe("streamInfoHeader", () => {
 });
 
 /**
- * Une trame illisible est signalée, pas levée.
- *
- * mediabunny enchaîne les appels d'un décodeur maison les uns derrière les autres : une promesse
- * rejetée empoisonnait la chaîne, et plus aucune trame n'était décodée — le son s'arrêtait pour
- * le reste du film, sans message (relevé le 23/09/2026). L'erreur passe par `onError`, que
- * mediabunny sait remonter.
+ * Une trame illisible est signalée, pas levée : `decodedFrom` la remonte au transcodeur, qui passe la
+ * main (relevé le 23/09/2026 : une promesse rejetée chez mediabunny arrêtait le son sans message).
  */
-describe("FlacDecoder — trame refusée", () => {
+describe("décodeur FLAC — trame refusée", () => {
   it("prévient par onError au lieu de rejeter", async () => {
-    const { instance } = await decoder(STREAMINFO);
-    const onError = vi.fn();
-    Object.assign(instance, { onError });
-    await expect(instance.decode({ data: new Uint8Array([0xff, 0xf8, 0, 0, 0, 0]), timestamp: 0 } as never)).resolves.toBeUndefined();
+    const { instance, onError } = await decoder(STREAMINFO);
+    await expect(instance.decode(packet(new Uint8Array([0xff, 0xf8, 0, 0, 0, 0]), 0))).resolves.toBeUndefined();
     expect(onError).toHaveBeenCalled();
-    await instance.close();
+    instance.close();
   });
 });
