@@ -36,14 +36,7 @@ to `/`, so old links, open tabs and already-installed home-screen shortcuts keep
 manager. Nothing here names a service, a container or a download client; a title is a poster, and
 everything you can do with it hangs off that poster.
 
-<!-- CAPTURE : cinema-home-desktop.png
-     THE hero shot of the project — put the most representative one here.
-     Cinema home, desktop, 1920×1080, a full-bleed backdrop at the top with its title logo, and
-     the first two rows of posters visible underneath. Pick a title whose artwork is striking and
-     whose backdrop is dark enough for the gradient to read.
-     Then uncomment:
-<img src="screenshots/cinema-home-desktop.png" width="100%">
--->
+<img src="screenshots/hero-home.webp" alt="The home screen" width="100%">
 
 ### Getting around
 
@@ -135,21 +128,9 @@ as soon as it arrives, and a press made before that waits for the answer rather 
 wrong episode. On desktop the synopsis takes up to five lines when the page has room above the
 logo.
 
-<!-- CAPTURE : cinema-movie-sheet.png
-     A film's sheet open over the home screen, showing the backdrop, the logo, the action row
-     and the beginning of the cast carousel.
-     Desktop, full width. Prefer a title with a good logo and a real cast list.
-     Then uncomment:
-<img src="screenshots/cinema-movie-sheet.png" width="100%">
--->
+<img src="screenshots/sheet-movie.webp" alt="A film's page" width="100%">
 
-<!-- CAPTURE : cinema-series-episodes.png
-     A series' episode browser: the season selector, episode thumbnails, a part-watched episode
-     with its progress bar, and the "up next" marker.
-     Desktop, full width.
-     Then uncomment:
-<img src="screenshots/cinema-series-episodes.png" width="100%">
--->
+<img src="screenshots/sheet-series.webp" alt="A series' episodes" width="100%">
 
 ### Search
 
@@ -160,13 +141,7 @@ not can be requested from the same result card. Recent searches are kept and can
 Natural-language queries work — `film de guerre de Christopher Nolan`, `série avec Pedro Pascal`,
 `comédie avec Ryan Gosling`.
 
-<!-- CAPTURE : cinema-search.png
-     The search panel with a query typed, showing the All / Movies / Series / People filters and
-     a mix of results: something available, something not in the library yet.
-     Desktop, full width.
-     Then uncomment:
-<img src="screenshots/cinema-search.png" width="100%">
--->
+<img src="screenshots/search.webp" alt="A search by description" width="100%">
 
 ### My list
 
@@ -245,22 +220,9 @@ reconstructs decode times, how random access points are verified, how audio is d
 re-encoded, what the server is still told, and the file map. For a non-technical presentation
 of the player, in French: [PRESENTATION-LECTEUR.md](../PRESENTATION-LECTEUR.md).
 
-<!-- CAPTURE : cinema-player.png
-     The player with its controls visible: timeline with chapter marks, the track menus open or
-     closed, the title and episode name.
-     Desktop, full width. A trickplay preview hovering over the timeline would be the best frame
-     to catch.
-     Then uncomment:
-<img src="screenshots/cinema-player.png" width="100%">
--->
+<img src="screenshots/player.webp" alt="The player, with the cast on screen" width="100%">
 
-<!-- CAPTURE : cinema-playback-info.png
-     The "Playback info" panel open during playback: the path taken, the file's video and audio
-     details, and what the device accepts.
-     Crop to the panel.
-     Then uncomment:
-<img src="screenshots/cinema-playback-info.png" height="360">
--->
+<img src="screenshots/playback-info.webp" alt="The playback info panel" width="100%">
 
 ### Downloads for offline viewing
 
@@ -338,14 +300,9 @@ other. The phone gets a bottom bar instead of the rail, swipe-to-close action sh
 feedback (Android/Chromium — iOS Safari has never implemented the Web Vibration API, even in an
 installed PWA), and installs to the Home Screen as a PWA with Web Push, Apple Web Push included.
 
-<!-- CAPTURE : cinema-mobile-home.png + cinema-mobile-sheet.png + cinema-mobile-search.png
-     Three phone screenshots, same device and theme, to sit side by side:
-       1. the home screen with the hero and the first row, bottom bar visible
-       2. a film's sheet with its inline actions
-       3. the search panel with results
-     Then uncomment:
-<img src="screenshots/cinema-mobile-home.png" height="320"> <img src="screenshots/cinema-mobile-sheet.png" height="320"> <img src="screenshots/cinema-mobile-search.png" height="320">
--->
+<img src="screenshots/mobile-home.webp" alt="Home on a phone" height="420"> <img src="screenshots/mobile-sheet.webp" alt="A film's page on a phone" height="420">
+
+<img src="screenshots/mobile-player.webp" alt="The player on a phone, in landscape" width="70%">
 
 ---
 
@@ -366,11 +323,7 @@ Its top entry is **Back to Cinema**. Personal preferences — language, notifica
 are not here: they are in Cinema's *Account*, for the administrator as for everyone, and a discreet
 link under Configuration says so.
 
-<!-- CAPTURE : gestion-home-1.png + gestion-home-mobile.png
-     The management overview, desktop and phone: downloads in progress, service status, storage and
-     the activity summary. Then uncomment:
-<img src="screenshots/gestion-home-1.png" height="210"> <img src="screenshots/gestion-home-mobile.png" height="210">
--->
+<img src="screenshots/gestion-overview.webp" alt="Management overview: downloads and services" width="100%">
 
 ### Overview
 
@@ -429,6 +382,9 @@ list* are Cinema's:
   refresh, and the space measured on the disk. The server refuses a plan that changed since the
   preview, and keeps a torrent that also serves another title.
 
+  <img src="screenshots/gestion-tri.webp" alt="Cleanup: a title's details and the reasons for its score" width="100%">
+
+
 Lists, discovery and recommendations are Cinema's: Management has no watchlist of its own.
 
 ### Requests and downloads
@@ -452,12 +408,7 @@ Lists, discovery and recommendations are Cinema's: Management has no watchlist o
 - Library and person statistics across movies and series
 - Storage breakdown (movies / series / seeds / other) and a disk saturation forecast
 
-<!-- CAPTURE : gestion-stats-mobile.png
-     The statistics page on a phone: top actors or directors ranked, or the storage breakdown.
-     Whichever of the two reads best at that width.
-     Then uncomment:
-<img src="screenshots/gestion-stats-mobile.png" height="320">
--->
+<img src="screenshots/gestion-stats.webp" alt="Statistics: the library, storage and how fast it fills" width="100%">
 
 ### Ratings
 
