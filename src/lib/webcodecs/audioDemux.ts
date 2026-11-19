@@ -23,11 +23,12 @@
 // - le tri des trames : la dernière qui commence avant l'instant demandé, puis toutes les
 //   suivantes (`mediaSamplesInRange`).
 //
-// Ce qu'il fait autrement, exprès : il **abandonne** une piste qui ne rend plus rien. Passé
-// `GIVE_UP_S` secondes de fichier sans un paquet de la piste (depuis son dernier paquet, ou depuis
-// le début de la lecture s'il n'en a vu aucun) — un doublage
-// qui s'arrête avant le générique —, la lecture s'arrête là au lieu de descendre jusqu'à la fin du
-// fichier. Le transcodeur comble de silence ce qui manque, comme pour un son qui commence tard.
+// Ce qu'il fait autrement, exprès : **en cherchant le point de départ**, il abandonne une piste qui
+// ne rend plus rien. Passé `GIVE_UP_S` secondes de fichier sans un paquet de la piste après un saut —
+// un saut au-delà de la fin d'un doublage plus court que le film —, il rend le dernier paquet vu
+// (comme mediabunny) au lieu de lire jusqu'à la fin du fichier. **Une fois parti, jamais** : un trou
+// au milieu d'une piste se traverse, comme chez mediabunny (relecture du 19/11/2026 — couper là
+// aurait laissé le reste du film sans son).
 import type { ByteSource } from "./byteSource";
 import { clusterOffsetForTime, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { createSampleReader } from "./mediaFile";
@@ -47,10 +48,9 @@ export interface DemuxedAudioPacket {
 const MARGIN_US = 1_000_000;
 
 /**
- * Au-delà, une piste qui ne rend plus rien est finie pour cette lecture. Mesuré sur la bibliothèque :
- * aucun trou intérieur à une piste ne dépasse quelques secondes (le plus long est le silence de tête
- * de *The Circle*, 30 s — mais celui-là est *avant* le premier paquet, et un départ avant le premier
- * paquet prend le premier, sans rien chercher).
+ * Pendant la recherche du point de départ seulement : au-delà, la piste est finie pour cette lecture.
+ * Large exprès — un départ avant le premier paquet prend le premier, quelle que soit la distance
+ * (le silence de tête de *The Circle*, 30 s) : cette borne ne vise que la fin d'un doublage.
  */
 export const GIVE_UP_S = 45;
 
@@ -75,13 +75,21 @@ export async function* audioPacketsFrom(
   file: MatroskaFile,
   trackNumber: number,
   fromSeconds: number,
-  stats: AudioDemuxStats = newAudioDemuxStats()
+  stats: AudioDemuxStats = newAudioDemuxStats(),
+  /** Levé par qui abandonne cette lecture (un saut ailleurs) : on cesse de lire au tour suivant. */
+  cancel: { stopped: boolean } = { stopped: false }
 ): AsyncGenerator<DemuxedAudioPacket> {
   const track = file.tracks.find((t) => t.number === trackNumber);
   if (!track) throw new Error(`piste ${trackNumber} introuvable`);
   const fromUs = Math.max(0, fromSeconds) * 1e6;
+  const searchUs = Math.max(0, fromUs - MARGIN_US);
+  // Avant le premier point d'index : depuis le tout premier échantillon du fichier, toutes pistes. Dans
+  // un MP4, ce point est la première image clé — et le son qui la précède (64 ms sur *Les Poupées
+  // russes*, dont l'image commence à 0,064 s) était sauté au démarrage (relecture du 19/11/2026).
+  // Pour un Matroska, c'est le même endroit : le premier cluster.
+  const beforeIndex = file.cues.length === 0 || searchUs <= file.cues[0].timeUs;
   const start =
-    clusterOffsetForTime(file, Math.max(0, fromUs - MARGIN_US)) ?? file.firstClusterOffset ?? file.segmentDataStart;
+    (beforeIndex ? null : clusterOffsetForTime(file, searchUs)) ?? file.firstClusterOffset ?? file.segmentDataStart;
   const reader = createSampleReader(source, file, start);
   const laced = lacedTimeline(track);
 
@@ -90,13 +98,15 @@ export async function* audioPacketsFrom(
   // Depuis quand la piste se tait : son dernier paquet, ou à défaut le début de cette lecture.
   let silentSinceUs: number | null = null;
   for (;;) {
+    if (cancel.stopped) return;
     const sample = await reader.next();
     if (!sample) break;
     if (!started) stats.scanned += 1;
     silentSinceUs ??= sample.timestampUs;
     if (sample.trackNumber !== trackNumber) {
-      // Une piste finie : plus rien d'elle depuis longtemps, alors que le fichier continue.
-      if (sample.timestampUs - silentSinceUs > GIVE_UP_S * 1e6) {
+      // Pendant la recherche seulement : plus rien de la piste depuis longtemps, alors que le fichier
+      // continue — elle est finie (voir l'en-tête). Une fois parti, un trou se traverse.
+      if (!started && sample.timestampUs - silentSinceUs > GIVE_UP_S * 1e6) {
         stats.gaveUp += 1;
         break;
       }
@@ -199,7 +209,9 @@ export async function* decodedFrom(
   packets: AsyncIterable<DemuxedAudioPacket>,
   openDecoder: (onFrame: (frame: RawFrame) => void, onError: (error: unknown) => void) => Promise<PacketDecoder>,
   fromSeconds: number,
-  configSampleRate: number
+  configSampleRate: number,
+  /** Levé par qui abandonne cette lecture : pas de vidage du décodeur pour rien. */
+  cancel: { stopped: boolean } = { stopped: false }
 ): AsyncGenerator<DecodedFrame> {
   const ready: DecodedFrame[] = [];
   let failure: { error: unknown } | null = null;
@@ -243,6 +255,7 @@ export async function* decodedFrom(
       if (failure) throw (failure as { error: unknown }).error;
       while (ready.length > 0) yield ready.shift()!;
     }
+    if (cancel.stopped) return;
     await decoder.flush();
     if (failure) throw (failure as { error: unknown }).error;
     if (!firstQueued && last) ready.push(last);

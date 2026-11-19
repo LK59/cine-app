@@ -154,13 +154,15 @@ it.skipIf(!process.env.DS_TRACKS)(
 
         if (NODE_DECODES.has(codecId)) {
           // L'ouverture : mediabunny relit en-tête et index ; nous, rien (le fichier est déjà lu).
+          // Nos paquets d'abord : c'est le premier enregistrement des décodeurs de mediabunny qui en note
+          // les classes (decoderClasses.ts, réservé à ce chemin de comparaison).
           let t0 = performance.now();
-          const a = await SoftwareAudioTrack.open(srcA, trackNumber, codecId, file);
-          const openA = { ms: Math.round(performance.now() - t0), ...srcA.cost() };
-          t0 = performance.now();
           const b = await SoftwareAudioTrack.open(srcB, trackNumber, codecId, file, { demux: "nôtre" });
           const own = takeOwnDemux();
           const openB = { ms: Math.round(performance.now() - t0), ...srcB.cost(), decoder: own?.decoder ?? "?" };
+          t0 = performance.now();
+          const a = await SoftwareAudioTrack.open(srcA, trackNumber, codecId, file);
+          const openA = { ms: Math.round(performance.now() - t0), ...srcA.cost() };
           row.open = { mb: openA, ours: openB };
           const decoded = [];
           for (const from of points) {

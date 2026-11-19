@@ -65,7 +65,7 @@ const AUDIO = 2;
  * paquet son toutes les 250 ms jusqu'à `audioEndS` (exclu) — un doublage plus court que le film.
  * Le premier cluster porte un bloc son laçé de deux trames à 0 ms.
  */
-function buildFile(seconds: number, audioEndS = seconds): Uint8Array {
+function buildFile(seconds: number, audioEndS = seconds, gap: [number, number] | null = null): Uint8Array {
   const info = el(0x1549a966, concat(el(0x2ad7b1, uint(1_000_000, 4)), el(0x4489, f64(seconds * 1000))));
   const track = (n: number, type: number, codec: string, extra: Uint8Array) =>
     el(0xae, concat(el(0xd7, uint(n)), el(0x83, uint(type)), el(0x86, new TextEncoder().encode(codec)), extra));
@@ -82,6 +82,7 @@ function buildFile(seconds: number, audioEndS = seconds): Uint8Array {
     for (let q = 0; q < 4; q++) {
       const ms = s * 1000 + q * 250;
       if (ms >= audioEndS * 1000) break;
+      if (gap && ms >= gap[0] * 1000 && ms < gap[1] * 1000) continue;
       // Le tout premier : deux trames laçées, qui couvrent 0–250 ms à elles deux.
       const frames = s === 0 && q === 0 ? [new Uint8Array([0, 1]), new Uint8Array([0, 2])] : [new Uint8Array([s & 0xff, q])];
       blocks.push(block(AUDIO, q * 250, frames));
@@ -153,6 +154,31 @@ describe("audioPacketsFrom — nos paquets, aux instants de mediabunny", () => {
     expect(stats.gaveUp).toBe(1);
     const perSecond = bytes.length / seconds;
     expect(source.readBytes).toBeLessThan(perSecond * (10 + GIVE_UP_S + 10));
+  });
+
+  it("un trou au milieu de la piste se traverse : rien n'est abandonné une fois parti", async () => {
+    // Relecture du 19/11/2026 : couper après GIVE_UP_S de silence aurait laissé la suite du film sans son.
+    const source = new MemoryByteSource(buildFile(200, 200, [20, 20 + GIVE_UP_S + 30]));
+    const file = await parseMatroska(source);
+    const stats = newAudioDemuxStats();
+    const packets = await collect(audioPacketsFrom(source, file, AUDIO, 10, stats));
+    expect(stats.gaveUp).toBe(0);
+    expect(packets.some((p) => p.timestamp > 20 + GIVE_UP_S + 30)).toBe(true);
+    expect(packets.at(-1)!.timestamp).toBe(199.75);
+  });
+
+  it("une lecture abandonnée cesse de lire au tour suivant", async () => {
+    const bytes = buildFile(200, 10);
+    const source = counted(bytes);
+    const file = await parseMatroska(source);
+    source.readBytes = 0;
+    const cancel = { stopped: false };
+    const gen = audioPacketsFrom(source, file, AUDIO, 100, newAudioDemuxStats(), cancel);
+    const pending = gen.next();
+    cancel.stopped = true;
+    await pending;
+    // Arrêté avant la fin de la recherche (GIVE_UP_S de fichier) : à peine un cluster lu.
+    expect(source.readBytes).toBeLessThan(bytes.length / 200 * 5);
   });
 
   it("demandé avant le premier paquet : le premier", async () => {

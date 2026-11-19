@@ -63,6 +63,12 @@ function sharedInput(source: ByteSource, core: Mediabunny, iso: boolean): Promis
 /** Par quel décodeur le dernier AAC à PCE s'est ouvert — pour la ligne `start` (DECISIONS.md §62). */
 let lastAacRoute: "wasm-decode" | "browser-decode" | null = null;
 
+/** La piste a-t-elle un décodeur sur le chemin « Son par Lumen » (ownAudio.ts, `codecNamesFor`) ? */
+function ownChainTakes(file: MatroskaFile, trackNumber: number): boolean {
+  const codecId = file.tracks.find((t) => t.number === trackNumber)?.codecId ?? "";
+  return /^A_(AC3|EAC3|DTS|FLAC|OPUS|AAC)(\/|$)/.test(codecId);
+}
+
 /** La dernière piste ouverte par nos paquets (essai demux-son) — pour le banc. */
 let lastOwnDemux: import("./ownAudio").OwnAudioTrack | null = null;
 export function takeOwnDemux(): import("./ownAudio").OwnAudioTrack | null {
@@ -202,7 +208,9 @@ export class SoftwareAudioTrack {
   ): Promise<SoftwareAudioTrack> {
     // « Son par Lumen » complet (§197) : nos paquets et nos décodeurs — mediabunny n'est ni chargé
     // ni consulté. Le FLAC par libFLAC directement, l'Opus et l'AAC par l'AudioDecoder du navigateur.
-    if (demux === "nôtre" && decoders === "nôtres" && file) {
+    // Un codec que ce chemin ne nomme pas (PCM, Vorbis, MP3…) reste à mediabunny : mieux vaut l'ancien
+    // chemin qu'un film parti au lecteur serveur pendant l'essai.
+    if (demux === "nôtre" && decoders === "nôtres" && file && ownChainTakes(file, trackNumber)) {
       let own;
       try {
         own = await (await import("./ownAudio")).openOwnAudioTrack(null, source, file, trackNumber, "nôtres");
@@ -213,21 +221,24 @@ export class SoftwareAudioTrack {
     }
     // Dynamic, and only the extension this file actually needs: the two are a megabyte and a
     // half each, and a file whose audio the browser already decodes never pays for either.
-    let core;
+    let core: typeof import("mediabunny") | undefined;
+    // Les classes des décodeurs ne sont notées (decoderClasses.ts) que pour nourrir NOS paquets à ceux
+    // de mediabunny — les bancs de comparaison. Partout ailleurs, l'enregistrement d'avant, tel quel.
+    const register = (fn: () => void) => (demux === "nôtre" && core ? registerCapturing(core, fn) : fn());
     try {
       core = await import("mediabunny");
       if (codecId === "A_DTS" || codecId?.startsWith("A_DTS/")) {
         const { registerDtsDecoder } = await import("@mediabunny/dts");
-        registerCapturing(core, registerDtsDecoder);
+        register(registerDtsDecoder);
       } else if (codecId === "A_FLAC") {
         const { registerFlacDecoder } = await import("./flacDecoder");
-        registerCapturing(core, registerFlacDecoder);
+        register(registerFlacDecoder);
       } else if (codecId === "A_OPUS" || codecId === "A_AAC") {
         // Rien à charger : mediabunny décode l'Opus — et l'AAC à PCE (voir aacConfig.ts) — par
         // l'AudioDecoder du navigateur. Charger ici le décodeur AC-3, c'était un mégaoctet pour rien.
       } else {
         const { registerAc3Decoder } = await import("@mediabunny/ac3");
-        registerCapturing(core, registerAc3Decoder);
+        register(registerAc3Decoder);
       }
     } catch (error) {
       throw new Error(`décodeur audio non chargé (${error instanceof Error ? error.message : "import échoué"})`);

@@ -144,6 +144,10 @@ function webCodecsOpener(config: AudioDecoderConfig) {
     let waiting: (() => void) | null = null;
     const decoder = new AudioDecoder({
       output: (data) => {
+        // Une place se libère aussi quand une trame sort : un navigateur sans l'évènement `dequeue`
+        // ne laisse pas l'envoi suivant attendre pour toujours.
+        waiting?.();
+        waiting = null;
         try {
           const ts = data.timestamp / 1e6;
           // Chromium ne respecte pas un instant de paquet négatif : on recale sur le premier envoyé.
@@ -229,6 +233,28 @@ function flacOpener(config: AudioDecoderConfig) {
   };
 }
 
+/**
+ * Le générateur tel quel, mais dont `return()` lève `cancel` **avant** d'être mis en file : un
+ * générateur asynchrone suspendu sur une lecture ne traite son `return()` qu'au prochain `yield`.
+ */
+function stoppable<T>(inner: AsyncGenerator<T>, cancel: { stopped: boolean }): AsyncGenerator<T> {
+  const wrapped = {
+    next: (...args: [] | [unknown]) => inner.next(...args),
+    return: (value?: unknown) => {
+      cancel.stopped = true;
+      return inner.return(value as T);
+    },
+    throw: (error?: unknown) => {
+      cancel.stopped = true;
+      return inner.throw(error);
+    },
+    [Symbol.asyncIterator]() {
+      return wrapped;
+    },
+  };
+  return wrapped as unknown as AsyncGenerator<T>;
+}
+
 export interface OwnAudioTrack {
   format: { sampleRate: number; numberOfChannels: number };
   samples(fromSeconds: number): AsyncGenerator<DecodedFrame>;
@@ -290,7 +316,12 @@ export async function openOwnAudioTrack(
   if (!decoderName.startsWith("ffmpeg-")) noteLumenFacts({ decoder: decoderName });
   return {
     format: { sampleRate, numberOfChannels },
-    samples: (fromSeconds: number) => decodedFrom(audioPacketsFrom(source, file, trackNumber, fromSeconds, stats), opener, fromSeconds, sampleRate),
+    samples: (fromSeconds: number) => {
+      // Un saut ailleurs abandonne cette lecture par `return()` : levé tout de suite, pour que la
+      // lecture des paquets cesse au tour suivant au lieu de chercher encore (jusqu'à GIVE_UP_S).
+      const cancel = { stopped: false };
+      return stoppable(decodedFrom(audioPacketsFrom(source, file, trackNumber, fromSeconds, stats, cancel), opener, fromSeconds, sampleRate, cancel), cancel);
+    },
     stats,
     decoder: decoderName,
   };
