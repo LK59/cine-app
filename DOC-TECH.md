@@ -17,12 +17,13 @@ names appears in a log field, a key, a file or a variable (`src/lib/engineBricks
 This document opens with a map of the whole application — both interfaces, the server, the
 player, the caches, the logs and the gate — and then becomes the native player's reference.
 
-**Vue en une page, zoomable : [ARCHITECTURE.svg](ARCHITECTURE.svg)** — the eight zones below on one
-vector drawing, with a legend; on a phone, open it, then tap *Raw* to zoom freely.
+**Vue en une page, zoomable : [ARCHITECTURE.svg](ARCHITECTURE.svg)** — the diagrams below on one
+vector drawing, with a legend; on a phone, open it, then tap *Raw* to zoom freely. It is generated
+from this section by `tools/architecture/build.sh` (README there): change a diagram here, then run it.
 
 ## Application map
 
-The whole application on seven diagrams, from the widest to the finest. Every box names the file,
+The whole application on eight diagrams, from the widest to the finest. Every box names the file,
 route or function that carries it, so the map doubles as an index into the code; the sections
 below it, and [`DECISIONS.md`](DECISIONS.md), hold the reasons.
 
@@ -35,7 +36,8 @@ below it, and [`DECISIONS.md`](DECISIONS.md), hold the reasons.
 4. [The life of one playback](#4-the-life-of-one-playback) — sequence, from *Lire* to the summary
 5. [Data flow and caches](#5-data-flow-and-caches) — SWR, the device cache, the server cache
 6. [Logs and observability](#6-logs-and-observability) — which line goes where, who reads it
-7. [Requests and security](#7-requests-and-security) — `src/proxy.ts`, cast passes, blocked tags
+7. [Requests and security](#7-requests-and-security) — `src/proxy.ts`, cast passes, share links, blocked tags
+8. [Optional features](#8-optional-features) — actors on screen, AI, books, library cleanup, share links, Stream Deck
 
 ### 1. The system
 
@@ -46,12 +48,13 @@ flowchart LR
         CIN["Cinema — /<br/>route group (player)<br/>every Jellyfin account"]
         GES["Management — /gestion<br/>route group (dashboard)<br/>administrator"]
         subgraph PLAY["Playback — PlaybackProvider → PlayerHost"]
-            NAT["Native player<br/>ExperimentalPlayerHost<br/>remux → MediaSource → video element"]
-            SRV["Server player<br/>PlayerHost · hls.js or native HLS"]
+            NAT["Native player — Lumen<br/>ExperimentalPlayerHost<br/>remux → MediaSource → video element"]
+            SRV["Server player<br/>PlayerHost · Jellyfin's HLS<br/>hls.js or native HLS"]
             CCP["ChromecastPlayer<br/>a remote control"]
             MINI["MiniPlayer<br/>reduced, draggable"]
             OFFP["Offline player<br/>OfflinePlayerHost · offlineEngine<br/>downloaded fMP4 → MediaSource"]
         end
+        BOOKR["Book reader — /livres in a frame<br/>ReaderFrame.tsx · foliate-js<br/>optional, off by default"]
         SW["Service worker — public/sw.js<br/>cine-static-BUILD caches, offline.html<br/>/hors-ligne kept where there are downloads"]
         subgraph DEV["Kept on the device"]
             IDB[("IndexedDB cine-cache<br/>catalogue and feeds, per account, 7 days")]
@@ -61,39 +64,42 @@ flowchart LR
         end
     end
 
+    SD["Stream Deck plugin<br/>streamdeck-plugin/ · bearer token"]
     RP["Reverse proxy<br/>TLS · shared with other sites"]
 
     subgraph BOX["Container — one image, docker compose"]
         direction TB
-        BOOT["server-boot/boot.mjs<br/>startup refusals · first-run secrets<br/>static carry-over · x-cine-peer"]
+        BOOT["server-boot/boot.mjs<br/>startup refusals · first-run secrets · x-cine-peer<br/>response framing: x-cine-encoding / x-cine-length<br/>→ real headers, bytes counted"]
         GATE{"src/proxy.ts<br/>the single gate"}
-        PAGES["Pages<br/>(player) · (dashboard) · /setup · /login · /status · /hors-ligne"]
+        PAGES["Pages<br/>(player) · (dashboard) · /setup · /login · /status<br/>/hors-ligne · /partage · /passage · /livres"]
         API["API routes — src/app/api/**<br/>thin, ~60 lines"]
-        LIB["src/lib<br/>clients/* · server-cache · watched · blockedTags<br/>subtitleGen · news · activity · reports · repliques"]
-        JOBS["instrumentation.ts timers<br/>notifications · torrent watch · status · backup<br/>device prune · new-account tags · poster prewarm · subtitle engine<br/>dialogue indexing (resume, nightly)"]
+        LIB["src/lib<br/>clients/* · server-cache · watched · blockedTags · share<br/>subtitleGen · ask · recap · xray · books · tri · libraryCheck<br/>offline · repliques · integrity · news · activity · reports"]
+        JOBS["instrumentation.ts timers — behind CINE_BACKGROUND_JOBS<br/>notifications · torrent watch · status · backup · disk samples<br/>device prune · new-account tags · request masking · share-link sweep<br/>poster and stats prewarm · Précédemment · books index<br/>subtitle engine · dialogue indexing · X-Ray scheduler · integrity · offline"]
+        WARM["Always on, read-only — catalogueWarm.ts<br/>library lists kept warm · selfWarm.ts asks<br/>its own catalogue routes over loopback"]
         CFG["config.ts getters<br/>app setting → .env → default"]
         subgraph DATA["./data — the only writable volume"]
-            DB[("cine.db — SQLite<br/>sessions · watchlist · watched_titles · kv_cache<br/>app_settings · reports · news_pages · subtitle_gen_*")]
+            DB[("cine.db — SQLite<br/>sessions · watchlist · watched_titles · kv_cache · app_settings<br/>reports · news_pages · subtitle_gen_* · ai_spend_days<br/>shares · subtitle_sync · tri_removals · book_*")]
             LOGS[("data/logs/*.log")]
             IMGC[("data/image-cache")]
             SEC[("data/config/secrets.json")]
             REPS[("data/reports/ID/")]
             OFFD[("data/offline/ID.mp4<br/>copies Jellyfin prepared for offline downloads")]
             REPL[("data/repliques.db — SQLite, separate<br/>dialogue lines · FTS5 · vocabulary<br/>rebuildable, not in the nightly copy")]
+            BIDX[("book-index.json<br/>the shared books index")]
         end
-        MEDIA[("/mnt/media/video — read-only<br/>films read by the dialogue indexer")]
+        MEDIA[("/mnt/media/video — read-only<br/>read by dialogue indexing, integrity, cleanup")]
     end
 
     subgraph UP["Upstream services"]
-        JF["Jellyfin<br/>accounts · library · streams<br/>HLS transcode · progress"]
+        JF["Jellyfin<br/>accounts · library · streams<br/>HLS transcode · progress · books"]
         ARR["Radarr · Sonarr"]
         JS["Jellyseerr<br/>requests"]
         QB["qBittorrent"]
         BZ["Bazarr<br/>subtitles"]
         JK["Jackett<br/>indexers"]
-        META["TMDB · OMDb · MDBList<br/>metadata, images, ratings"]
-        AI["AI provider<br/>Anthropic · OpenAI · Google<br/>generated subtitles · description search<br/>Précédemment · questions · Jusqu'ici"]
-        XR["laterna-xray — optional sidecar<br/>who is on screen, who speaks<br/>local, reads the media read-only"]
+        META["TMDB · OMDb · MDBList · Google Books<br/>metadata, images, ratings"]
+        AI["AI provider — one key, one monthly ceiling<br/>Anthropic · OpenAI · Google"]
+        XR["laterna-xray — optional sidecar<br/>who is on screen · scene cuts · subtitle sync<br/>local, reads the media read-only"]
         WP["Web Push services<br/>VAPID"]
     end
 
@@ -103,17 +109,22 @@ flowchart LR
     GES -->|"pages, /api/*"| RP
     NAT -->|"HTTP ranges on the file"| RP
     SRV -->|"HLS playlists and segments"| RP
+    BOOKR -->|"EPUB, progress"| RP
+    SD -->|"/api/streamdeck — plays in progress"| RP
     RP --> BOOT --> GATE
     GATE -->|"session checked"| PAGES
     GATE -->|"session and role checked"| API
     API --> LIB
     JOBS --> LIB
+    WARM -->|"loopback, x-cine-peer"| API
     LIB --> CFG
     CFG --> DB
     LIB <--> DB
     LIB -->|"append, rotate at 5 MB"| LOGS
     LIB <-->|"small timed batches"| REPL
+    LIB --> BIDX
     JOBS -->|"sidecar .srt · MKV Cues · full read"| MEDIA
+    LIB -.->|"stat by inode — cleanup plan"| MEDIA
     LIB --> JF
     LIB --> ARR
     LIB --> JS
@@ -124,7 +135,7 @@ flowchart LR
     LIB --> AI
     LIB -->|"orders, scenes, voices — Bearer key"| XR
     LIB -->|"web-push"| WP
-    WP -.->|"push event"| SW
+    SW -.-|"push event from the Web Push services"| WP
     CCP -.->|"Cast load request"| TV
     SRV -.->|"AirPlay route"| TV
     TV -->|"stream with a signed castToken, no cookie"| RP
@@ -136,31 +147,26 @@ flowchart LR
 ```
 
 Everything a viewer sees goes through `src/proxy.ts`; nothing in the browser talks to an upstream
-service directly, and only a television fetches without a session cookie. Configuration and
-secrets live in `data/` beside the database ([DECISIONS §48](DECISIONS.md)), so a fresh install
-needs no `.env`.
+service directly. Three callers come in without a session cookie: a television (a signed pass for one
+title's stream and subtitles), a Stream Deck (its own bearer token), and the server itself warming its
+catalogue routes over loopback. Configuration and secrets live in `data/` beside the database
+([DECISIONS §48](DECISIONS.md)), so a fresh install needs no `.env`. A copy of the application started
+with `CINE_BACKGROUND_JOBS=off` (`backgroundJobs.ts`) runs none of the timers, only the read-only
+catalogue warm-ups ([§145](DECISIONS.md)). A route never writes `Content-Encoding` or `Content-Length`
+itself: it sets `x-cine-encoding` / `x-cine-length`, and `boot.mjs` turns them into the real headers
+([§131](DECISIONS.md)).
 
 **Dialogue search** ([DECISIONS §88](DECISIONS.md), `src/lib/repliques/`) is the one part of the
-server that reads media files itself. When an administrator turns it on, a background pass reads
-each library film's text subtitles — a sidecar file first, otherwise the MKV's text track through
-its Cues (one 4 KiB read per line, `mkvText.ts`, reusing the player's Matroska parser read-only),
-otherwise the whole file streamed — and writes them to `data/repliques.db`, a separate SQLite file
-with an FTS5 index on the folded text. Every file read passes a gate that stops for a pause and
-waits while anyone is watching (Jellyfin sessions, the stream relay, the playback beat). The
-cinema search queries it through `/api/repliques`, after and apart from the title search.
-
-**Actors on screen** ([DECISIONS §138](DECISIONS.md), `src/lib/xray/`, off by default) are computed by a
-separate service, `laterna-xray`, with its own image and its own SQLite: it decodes each file with
-ffmpeg, recognises faces against TMDB photos and names voices from those faces. Laterna orders an
-analysis when a playback starts and from a background scheduler (only while nothing plays), and the
-player reads the scenes once per item (`/api/player/xray/[itemId]`, 200 for every absence). The
-service, its API contract and its measurements: [xray/README.md](xray/README.md).
-
-**AI features** ([DECISIONS §135, §137, §139, §140](DECISIONS.md)) — description search,
-« Précédemment », questions about a title or a person, « Jusqu'ici » — share the generated subtitles'
-provider, key and monthly ceiling. Their sources are built on the server from what the account has
-watched only (`src/lib/ask/`, `src/lib/recap/`), and every answer passes the same name check before it
-is shown.
+server that reads subtitles out of media files itself. When an administrator turns it on, a background
+pass reads each library film's text subtitles — a sidecar file first, otherwise the MKV's text track
+through its Cues (one 4 KiB read per line, `mkvText.ts`, reusing the player's Matroska parser
+read-only), otherwise the whole file streamed — and writes them to `data/repliques.db`, a separate
+SQLite file with an FTS5 index on the folded text. Every file read passes a gate that stops for a pause
+and waits while anyone is watching (Jellyfin sessions, the stream relay, the playback beat). The cinema
+search queries it through `/api/repliques`, after and apart from the title search. **The integrity
+check** (`src/lib/integrity/`, [§93](DECISIONS.md)) reads every video file with the native player's
+own parser to list damaged ones, through the same gate and never at the same time
+(`backgroundDiskReads.ts`).
 
 **Offline downloads** ([DECISIONS §109](DECISIONS.md), `src/lib/offline/`) do not read media
 files: Jellyfin transcodes a lighter version through its API (`/Videos/{id}/stream.mp4`, fragmented
@@ -170,15 +176,19 @@ of its own. `/hors-ligne` is a public page the service worker keeps per build, s
 downloads without a network. Description, in French:
 [docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md).
 
+The actors-on-screen service, the AI features, books, library cleanup, share links and the Stream
+Deck have their own diagram, [8](#8-optional-features).
 ### 2. The two interfaces
 
 ```mermaid
 flowchart TB
     LOGIN["/login<br/>Jellyfin account — /api/auth/jellyfin<br/>local administrator — /api/auth/login"]
     SETUP["/setup — first-launch assistant<br/>welcome · admin · jellyfin · tmdb · library<br/>extras · deployment · finish"]
+    SHARE["/partage/CODE — share link<br/>password → /api/share/redeem<br/>role share: one title, until its end date"]
     SETUP -->|"setup flag set"| LOGIN
     LOGIN -->|"Jellyfin session · admin or user"| SHELL
     LOGIN -->|"local session, no Jellyfin identity"| OV
+    SHARE -->|"ShareTitleView — only that title"| PLAYER
 
     subgraph CINEMA["Cinema — / — PlayerShell; address state in the hash (cinemaRoute.ts)"]
         direction TB
@@ -188,20 +198,21 @@ flowchart TB
             MOB["CinemaMobileClient — phone<br/>CinemaMobileHero · flick rows"]
             ROWS["Rows<br/>CinemaRow · CinemaTop10Row · CinemaDiscoveryRow<br/>CinemaSeriesRow · Reprendre / À suivre"]
             GRID["Full grid — browse=genre or *<br/>CinemaBrowseSheet"]
+            BOOKS["Books — a mode, livres=1 · BooksMode.tsx<br/>reader: ReaderFrame → /livres · optional"]
         end
         subgraph SHEETS["Sheets — useSheetMorph, cinemaClose"]
-            MOVIE["Film — film=ID<br/>CinemaMovieDetail · CinemaMobileDetail"]
-            SERIES["Series — serie=ID<br/>CinemaSeriesDetail → CinemaEpisodeBrowser"]
+            MOVIE["Film — film=ID<br/>CinemaMovieDetail · CinemaMobileDetail<br/>ShareControl — admin"]
+            SERIES["Series — serie=ID<br/>CinemaSeriesDetail → CinemaEpisodeBrowser<br/>Précédemment — useSeriesRecap"]
             TMDB["Not in the library — discover=ID<br/>PlayerDiscoverSheet → request"]
             PERSON["Person — person=ID<br/>PlayerPersonSheet"]
         end
-        SEARCH["Search — search=1<br/>PlayerSearchPanel"]
+        SEARCH["Search — search=1 — PlayerSearchPanel<br/>titles · by description /api/search/describe<br/>dialogue lines /api/repliques"]
         LIST["Ma liste — list=1<br/>PlayerListPanel"]
         subgraph ACCOUNT["Account — account=1 — PlayerAccountPanel"]
             PREFS["Preferences<br/>interface language · playback languages"]
             ACC["Account<br/>password · devices and sessions"]
             NOTIF["Notifications<br/>PushToggle · per-account choices"]
-            DISP["Display<br/>home layout · guided scroll"]
+            DISP["Display<br/>home layout · guided scroll · interface Auto / Touch / Computer"]
             HELP["Help<br/>Nouveautés · onboarding · service status<br/>HDR FAQ · storage · report a problem"]
             subgraph ADMIN["Administration — admin only"]
                 ACT["Activité — activity=…<br/>overview · compte: · seance: · journaux · signalement: · nouveautes"]
@@ -214,7 +225,7 @@ flowchart TB
         REPORT["Report — report=…<br/>PlayerReportPanel · ReportWizard"]
     end
 
-    subgraph MGMT["Management — /gestion — layout: Sidebar / MobileNav"]
+    subgraph MGMT["Management — /gestion — layout: Sidebar / MobileNav — navItems.ts"]
         direction TB
         BRIDGE["NavBridge<br/>back to the cinema · account preferences"]
         subgraph INFRA["Infrastructure"]
@@ -223,21 +234,22 @@ flowchart TB
             SON["/sonarr · /sonarr/ID — series"]
             QBP["/qbittorrent — downloads"]
             CAL["/calendar"]
-            STA["/stats"]
+            STA["/stats · /person/ID"]
             IMP["/timeline — imports"]
             LCK["/controle — library check<br/>read-only · §90"]
+            TRI["/tri — library cleanup<br/>score, preview, full removal · §198"]
             subgraph SVC["Services"]
-                SV1["/bazarr · /jackett · /jellyfin · /jellyseerr"]
+                SV1["/bazarr · /jackett · /jellyfin<br/>/jellyseerr · /jellyseerr/masquage"]
                 HEALTH["/health — service checks"]
             end
         end
         subgraph CONF["Configuration"]
             C1["/parametres — connections"]
             C2["/parametres/lecture — playback"]
-            C7["/parametres/diffusion · /livres — casting and offline, books"]
-            C3["smart features: /parametres/ia · /acteurs · /synchro-sous-titres · /repliques · /recadrage"]
+            C7["/parametres/diffusion — casting and offline<br/>/parametres/livres — books"]
+            C3["Smart features<br/>/parametres/ia · /acteurs · /synchro-sous-titres<br/>/repliques · /recadrage"]
             C4["/parametres/comptes — new accounts"]
-            C5["/parametres/administration — administrator"]
+            C5["/parametres/administration<br/>administrator · Stream Deck tokens"]
             C6["/parametres/deploiement — deployment"]
         end
     end
@@ -258,12 +270,24 @@ flowchart TB
     MOVIE -->|"Lire"| PLAYER["Player — section 3"]
     SERIES -->|"Lire"| PLAYER
     ROWS -->|"resume"| PLAYER
+
+    %% Invisible links stack boxes that share a rank, so the drawing is not one very long row.
+    DESK ~~~ MOB
+    GRID ~~~ BOOKS
+    PREFS ~~~ ACC ~~~ NOTIF
+    DISP ~~~ HELP
+    ACT ~~~ MAINT
+    LAB ~~~ TOG
+    OV ~~~ RAD ~~~ SON
+    QBP ~~~ CAL ~~~ STA
+    IMP ~~~ LCK ~~~ TRI
 ```
 
-Two roles, `admin` and `user`. Hiding the administration group and the management link is
-presentation only: a `user` who types `/gestion` gets pages whose reads answer 403
-(`ADMIN_ONLY_READS`, diagram 7). Every cinema screen is a field of the address hash, so Back steps
-out one screen at a time; desktop and phone are two layouts sharing one function per decision
+Three roles: `admin`, `user`, and `share` for a share link ([DECISIONS §112](DECISIONS.md)). Hiding
+the administration group and the management link is presentation only: a `user` who types `/gestion`
+is sent back to `/`, and the management reads answer 403 (`ADMIN_ONLY_PAGES`, `ADMIN_ONLY_READS`,
+diagram 7). Every cinema screen is a field of the address hash, so Back steps out one screen at a time;
+desktop and phone are two layouts sharing one function per decision
 ([DECISIONS §31, §52, §74, §81](DECISIONS.md), [The sheet lifecycle in CLAUDE.md](CLAUDE.md)).
 
 **What the cinema shows, and where its truth comes from** ([DECISIONS §47, §89](DECISIONS.md)):
@@ -276,7 +300,9 @@ down, nothing becomes "Jellyfin only" (eight hundred films would change identifi
 outage). **The library check** (`/controle`, `src/lib/libraryCheck/`, [§90](DECISIONS.md)) lists
 where these sources disagree — identity, episode numbering (with TMDB as an independent arbiter),
 files Radarr probably misfiled, Jellyfin-only titles, hard-linked double filings — in a background
-pass stored in `library_check`; it writes nowhere else, and only suggests gestures.
+pass stored in `library_check`; it writes nowhere else, and only suggests gestures. **Library
+cleanup** (`/tri`, diagram 8) is the one management page that deletes, and only through the services
+that own the files.
 
 ### 3. The player
 
@@ -287,7 +313,7 @@ flowchart TB
     PB["PlayButton · useQueuedPlay<br/>resumeAt: a number, or absent = ask the server"] --> PP["PlaybackProvider<br/>setWatchingFullScreen · reload intent"]
     PP --> PH["PlayerHost<br/>native first · useStableFallback · fallToStable"]
     PH -->|"default"| EXP["ExperimentalPlayerHost"]
-    EXP --> DI["/api/jellyfin/direct/ID<br/>tracks, streamUrl, logo — prefetched by the sheet"]
+    EXP --> DI["/api/jellyfin/direct/ID<br/>tracks, streamUrl, logo, subtitle sync — prefetched by the sheet"]
     EXP --> PS["/api/jellyfin/playback-state/ID<br/>position, account preferences"]
     EXP --> TRK["chooseAudioTrack · chooseSubtitleTrack<br/>picked before the pipeline is built"]
     TRK --> PROBE["probePlaybackPath → choosePlaybackPath → tryRemux<br/>pathSelector.ts"]
@@ -322,9 +348,32 @@ flowchart TB
     RX --> VID["Video — samples copied<br/>H.264 · HEVC · AV1 · HDR · Dolby Vision"]
     RX --> AQ{"Audio — deliveredAudio<br/>can it cross MediaSource as-is?"}
     AQ -->|"yes"| ACP["Copied bit for bit<br/>AAC · AC-3 · E-AC-3 · FLAC · Opus, per browser"]
-    AQ -->|"no"| ADEC["softwareAudio.ts — decoded in the tab<br/>TrueHD WASM · AAC WASM · AC-3/E-AC-3/DTS WASM · FLAC"]
-    ADEC --> AENC["audioTranscode.ts — AudioEncoder<br/>AAC, Apple order, ≤ 6 ch · or Opus"]
-    AQ -->|"no decoder: MP2, MP3, Vorbis, PCM"| FALL
+    AQ -->|"no"| SWA["softwareAudio.ts — SoftwareAudioTrack<br/>samples(from) → Float32 planes"]
+    AQ -->|"nothing carries it: MP2, Vorbis, PCM"| FALL
+
+    subgraph ACHAIN["Sound decoded in the tab — §197"]
+        direction TB
+        ADMX["audioDemux.ts — our packet reader<br/>packets from any instant, laced frames spread<br/>ownAudio.ts picks the decoder"]
+        WTH["TrueHD · AC-3 · E-AC-3 · DTS<br/>FFmpeg 7.1.5 in WebAssembly<br/>truehdDecoder.ts — one Web Worker per module,<br/>main thread only when no worker starts"]
+        WAAC["AAC with a PCE the browser refuses<br/>aac/aacWasmAudio.ts — FFmpeg 7.1.5 WASM"]
+        WFL["FLAC where MediaSource refuses it<br/>libFLAC — @wasm-audio-decoders/flac · flacHeader.ts"]
+        WWC["Opus · AAC · MP3<br/>the browser's AudioDecoder"]
+        WPCM["PCM — a byte conversion"]
+        LEAD["audioLeadGap.ts — withLeadSilence<br/>sound that starts after the picture · §148"]
+    end
+    SWA --> ADMX
+    ADMX --> WTH
+    ADMX --> WAAC
+    ADMX --> WFL
+    ADMX --> WWC
+    ADMX --> WPCM
+    WTH --> LEAD
+    WAAC --> LEAD
+    WFL --> LEAD
+    WWC --> LEAD
+    WPCM --> LEAD
+    LEAD --> AENC["audioTranscode.ts — AudioEncoder<br/>AAC, Apple order, ≤ 6 ch · or Opus"]
+
     VID --> MUX["mp4Muxer.ts · mp4Boxes.ts · mp4SampleEntries.ts<br/>init and media segments — fMP4"]
     ACP --> MUX
     AENC --> MUX
@@ -333,21 +382,26 @@ flowchart TB
     MSE --> EL["video element<br/>hardware decode · native HDR"]
     SEEK["hostSeek.ts · seekLifecycle.ts · seekArrival.ts"] -.-> MSE
     BG["backgroundReturn.ts — BackgroundWatch<br/>rebuild if the source was closed"] -.-> RPB
+    AKA["audioKeepAwake.ts<br/>iPhone/iPad: sound output kept awake in a pause"] -.-> EL
     RPB -.->|"keepOnStop on close"| DSK
 ```
 
 No pixel and no copied audio sample passes through JavaScript: the remuxer only rewrites the
-packaging. A refusal is always a named string, which the activity page groups by. Details:
+packaging. Sound that cannot cross MediaSource is read by the player's own packet reader, decoded in
+the tab and encoded again; no third-party media library is involved since 19/11/2026
+([§197](DECISIONS.md)), and any audio error hands the film to the server player rather than playing it
+silent. A refusal is always a named string, which the activity page groups by. Every file plays
+through this path on every engine: the server-side remux that served Safari as HLS (*Lumen serveur*)
+is archived, and every old `/api/lumen/*` address answers 410 ([§196](DECISIONS.md)). Details:
 [Path selection](#path-selection), [The remux pipeline](#the-remux-pipeline),
 [MSE delivery](#mse-delivery), [Audio](#audio), [The lead reserve](#the-lead-reserve-in-memory),
-[DECISIONS §3, §4, §28, §62, §66](DECISIONS.md).
-
+[DECISIONS §3, §4, §28, §62, §66, §148, §196, §197](DECISIONS.md).
 #### 3b. The server player and the slow connection
 
 ```mermaid
 flowchart TB
     subgraph CAUSE["Why the server player plays"]
-        R1["refusal from the native path"]
+        R1["refusal from the native path<br/>or an audio decoder error"]
         R2["slow link → lighter version"]
         R3["casting — 3c"]
     end
@@ -367,7 +421,7 @@ flowchart TB
     RELAY["/api/jellyfin/stream/ID/…<br/>playlists compressed — encodePlaylist §76<br/>WebVTT offset fixed — fixVttTimestampMap"]
     RELAY --> HQ{"playsHlsNatively?"}
     HQ -->|"WebKit"| NHLS["native HLS in the video element"]
-    HQ -->|"elsewhere"| HJS["hls.js"]
+    HQ -->|"elsewhere"| HJS["hls.js — server/wireServerHls.ts"]
     NHLS --> SUP["ServerStartup — serverStartup.ts<br/>lists, first segment, picture → startup.*"]
     HJS --> SUP
 
@@ -394,7 +448,7 @@ flowchart TB
 
 The server player is a safety net, not a second product: it plays what the native path refuses,
 what a slow link cannot carry and what goes to a television. Jellyfin decides between DirectPlay,
-DirectStream and Transcode; every byte still goes through the cine-app relay. Details:
+DirectStream and Transcode; every byte still goes through the application's relay. Details:
 [User-facing messages](#user-facing-messages), [Slow connection](#slow-connection),
 [DECISIONS §4, §23, §76–§79](DECISIONS.md).
 
@@ -408,6 +462,7 @@ flowchart LR
     HC --> CCP["ChromecastPlayer<br/>remote control · buildChromecastProfile<br/>H.264 ≤ 4.2, SDR, 1080p"]
     SPL -->|"AirPlay route — castRoute.ts"| TV["Television"]
     CCP -->|"Cast load request — chromecast/media.ts"| TV
+    CCP -.->|"no picture in 25 s<br/>relaunch once, sound in AAC stereo"| TV
     TV -->|"GET playlists, segments, subtitles<br/>castToken, no cookie · OPTIONS preflight"| GATE["src/proxy.ts<br/>castPassFor · castPreflightFor"]
     GATE --> RELAY["/api/jellyfin/stream relay<br/>CORS * without credentials — castCors.ts"]
     RELAY --> CPR["CastProgressRelay — castProgress.ts<br/>page silent ≥ 150 s → resume point from segments<br/>90 s without a segment → stop"]
@@ -416,12 +471,12 @@ flowchart LR
     TV -.->|"route ends"| EXP
 ```
 
-A MediaSource stream cannot leave the tab, so a television always gets the server's stream; the
-page becomes a remote control (Chromecast) or hands its element's route over (AirPlay). The server
-keeps the resume point when the page goes quiet. A Chromecast that accepts the load and shows no
-picture within 25 s is relaunched once with its sound re-encoded to AAC stereo, then the failure is
-said — the Cast kit names no receiver's decoders (`CAST_NO_PICTURE_MS`, DECISIONS §122). Details: [Path selection](#path-selection)
-(casting paragraphs), [DECISIONS §64](DECISIONS.md).
+A MediaSource stream cannot leave the tab, so a television always gets Jellyfin's stream through the
+server player; the page becomes a remote control (Chromecast) or hands its element's route over
+(AirPlay). The server keeps the resume point when the page goes quiet. A Chromecast that accepts the
+load and shows no picture within 25 s is relaunched once with its sound re-encoded to AAC stereo, then
+the failure is said — the Cast kit names no receiver's decoders (`CAST_NO_PICTURE_MS`, DECISIONS §122).
+Details: [Path selection](#path-selection) (casting paragraphs), [DECISIONS §64, §196](DECISIONS.md).
 
 ### 4. The life of one playback
 
@@ -432,9 +487,10 @@ sequenceDiagram
     participant UI as Sheet / PlayButton
     participant PP as PlaybackProvider
     participant P as ExperimentalPlayerHost
-    participant API as cine-app routes
+    participant API as Laterna routes
     participant JF as Jellyfin
     participant L as player.log
+    participant XR as laterna-xray
 
     V->>UI: Lire
     UI->>PP: play(item, resumeAt)
@@ -449,8 +505,12 @@ sequenceDiagram
     P->>P: probePlaybackPath → RemuxPlayback → init and first segments
     P->>API: POST /api/jellyfin/playback/playing
     API->>JF: session announced
-    P->>API: POST /api/player/log — opening, start (session, build, openedFrom)
+    P->>API: POST /api/player/log — opening, start (session, build, openedFrom, resumeFrom)
     API->>L: append
+    opt actors on screen offered to this account
+        API-)XR: order the item (high), the next episode (normal)
+        P->>API: GET /api/player/xray/ID — scenes, read once
+    end
     Note over P: first picture — the intro fades into the film
     loop every 30 s playing, 60 s paused
         P->>API: POST /api/jellyfin/playback/progress
@@ -472,7 +532,7 @@ sequenceDiagram
         P->>P: unsentStop summary kept in localStorage
         Note over P: back — BackgroundWatch rebuilds a closed source, rebuild line with hiddenMs
     end
-    alt refusal, slow link or cast
+    alt refusal, audio error, slow link or cast
         P->>PP: fallToStable — fallback line, server player continues, 3b
     end
     V->>P: close, or the film ends
@@ -487,9 +547,11 @@ sequenceDiagram
 
 One session id joins every line of a playback; a rebuild rewrites `start` under the same id. A
 page killed by iOS sends its summary at the next launch (`why: "lost"`), and a position Jellyfin
-never received leaves through `unsentPosition`. Details: [Playback reporting](#playback-reporting),
+never received leaves through `unsentPosition`. The `start` line is also what orders an actors-on-screen
+analysis — the only line all three players send, with the item and the position. `resumeAt: 0` means
+from the beginning; an absent `resumeAt` means ask the server. Details: [Playback reporting](#playback-reporting),
 [Seek lifecycle](#seek-lifecycle), [The playback log](#the-playback-log),
-[DECISIONS §1, §7, §24, §36, §84](DECISIONS.md), and `docs/cycle-de-vie-lecteur.md`.
+[DECISIONS §1, §7, §24, §36, §84, §138](DECISIONS.md), and `docs/cycle-de-vie-lecteur.md`.
 
 ### 5. Data flow and caches
 
@@ -497,6 +559,7 @@ never received leaves through `unsentPosition`. Details: [Playback reporting](#p
 flowchart TB
     subgraph CLIENT["Browser"]
         direction TB
+        EARLY["earlyFetch.ts — inline script in the (player) layout<br/>catalogue, resume, next-up leave with the HTML<br/>fetchOrEarly takes each once"]
         COMP["Screens — useSWR(key)"]
         SWRP["SWRProvider<br/>persistMiddleware · hydrateFromDisk"]
         IDB[("IndexedDB cine-cache — persistentCache.ts<br/>PERSISTED_KEYS · one store per account · 7 days<br/>PERSISTED_CACHE_SCHEMA · wiped at sign-out")]
@@ -507,51 +570,60 @@ flowchart TB
             FOLLOW["followOnlyOptions<br/>follows a key, never fetches on its own"]
             PAUSE["isPaused: isWatchingFullScreen<br/>a paused query is dropped, not deferred"]
         end
+        CREF["useCatalogueRefresh — catalogueRefresh.ts<br/>back in the foreground, 15 min old:<br/>If-None-Match, one at a time — §96"]
         CONT["useContinueRow<br/>Reprendre drawn from the device<br/>then corrected by sliding — §86"]
         RAP["refreshAfterPlayback<br/>resume · next-up · progress · series episodes · lists"]
         REASK["PlaybackProvider<br/>re-asks keys left with neither data nor error"]
+        SWC["public/sw.js — RELAY_THROUGH_WORKER<br/>WebKit: images and catalogues answered by the worker,<br/>so the HTTP cache is read back across launches"]
     end
 
-    subgraph SERVER["cine-app server"]
+    subgraph SERVER["Laterna server"]
         direction TB
         ROUTES["/api/cinema/* · /api/jellyfin/resume<br/>/api/player/lists · /api/player/discover"]
+        PREP["respondPrepared — cachedJson.ts<br/>ETag → 304 · brotli computed once per version<br/>x-cine-encoding marker"]
         HIDE["blockedTags.ts — hiddenForRequest<br/>filtered per account"]
         WATCH["watched.ts — setWatched · syncWatched<br/>local copy of watched"]
-        SC["server-cache.ts — withCache<br/>TTL · LRU 4 000 + 1 500 stale · swept every 10 min"]
+        SC["server-cache.ts — withCache<br/>TTL · LRU 4 000 + 1 500 stale · swept every 10 min<br/>state on globalThis"]
+        KEPT["withKeptCache — catalogueWarm.ts<br/>library lists re-read at ¾ of their TTL<br/>dropped after a day unread"]
         MI["cachedMovies · cachedSeries · matchIndex<br/>library matched once per list"]
         PC["withPersistentCache<br/>kv_cache in cine.db — TMDB projections"]
         INV["invalidateLibrary · invalidateByPrefix<br/>/api/cache/invalidate · Radarr/Sonarr writes"]
     end
 
+    EARLY -->|"same request, paired by our code"| COMP
     COMP --> SWRP
     SWRP <-->|"read at launch, 150 ms budget · written on each response"| IDB
     SWRP --> RULES
     RULES -->|"fetch"| ROUTES
+    CREF -->|"304 touches nothing"| ROUTES
+    SWC -.-> ROUTES
     IDB --> CONT
     CONT -->|"network answer arrives"| COMP
     RAP -->|"mutate"| SWRP
     REASK -->|"mutate"| SWRP
+    ROUTES --> PREP
     ROUTES --> HIDE
     ROUTES --> WATCH
     ROUTES --> SC
-    SC --> MI
+    SC --> KEPT
+    KEPT --> MI
     SC --> PC
-    INV -.->|"drops entries"| SC
+    INV -.->|"drops entries, re-read at once"| SC
     MI -->|"Radarr · Sonarr · Jellyfin"| UPS["Upstream services"]
     PC -->|"TMDB · OMDb · MDBList"| UPS
 ```
 
 The cinema opens on what the device kept, then the network corrects it; the catalogue is frozen on
-purpose (it changes daily), only the resume and next-up feeds follow focus. While a film fills the
-screen SWR is paused, which is why the player's own queries carry `playerBootstrapOptions` and why
-closing the player revalidates explicitly. The network's own answers lean on the browser's HTTP
-cache — the catalogue's `ETag` (a 304 when nothing changed), images `immutable` for a year — and on
-WebKit that cache is only read back across launches when the service worker *answers* the request:
-it relays images and the two catalogues + Nouveautés itself there (`RELAY_THROUGH_WORKER`,
-`public/sw.js`); a request it lets fall through was downloaded in full at every iPhone launch. The
-banner's logos and poster go through the image optimiser as WebP (`bannerImage`). Details: CLAUDE.md
-"Known pitfalls", [DECISIONS §7, §27, §29, §51, §55, §86, §121](DECISIONS.md).
-
+purpose (it changes daily), only the resume and next-up feeds follow focus, and the two catalogues are
+re-read on a return to the foreground once fifteen minutes old. While a film fills the screen SWR is
+paused, which is why the player's own queries carry `playerBootstrapOptions` and why closing the
+player revalidates explicitly. The network's own answers lean on the browser's HTTP cache — the
+catalogue's `ETag` (a 304 when nothing changed), images `immutable` for a year — and on WebKit that
+cache is only read back across launches when the service worker *answers* the request: it relays
+images and the two catalogues + Nouveautés itself there (`RELAY_THROUGH_WORKER`, `public/sw.js`); a
+request it lets fall through was downloaded in full at every iPhone launch. The banner's logos and
+poster go through the image optimiser as WebP (`bannerImage`). Details: CLAUDE.md "Known pitfalls",
+[DECISIONS §7, §27, §29, §51, §55, §86, §96, §121, §131](DECISIONS.md).
 ### 6. Logs and observability
 
 ```mermaid
@@ -560,14 +632,18 @@ flowchart LR
         direction TB
         NATL["Native player<br/>reportPlayback.ts"]
         SRVL["Server player · ChromecastPlayer<br/>serverPlayerLog.ts fields"]
+        OFFL["Offline player<br/>useOfflineSessionLog — start and stop"]
         RELAYL["castProgress.ts<br/>server-side cast relay"]
         CLI["Browser errors — reportClientError<br/>ErrorBoundary · window.onerror · rejections"]
-        SRVE["Server errors — logger.ts logError"]
-        BOOTL["Each cinema launch — startup timing<br/>Fire TV remote diagnosis · Nouveautés events"]
-        AUTHL["Sign-in, refusal, sign-out, refused token<br/>logAuthEvent"]
+        SRVE["Server errors — logger.ts logError<br/>offline steps, books, X-Ray"]
+        BOOTL["Each cinema launch — startup timing, storage<br/>Fire TV remote · iOS window height and return<br/>keyboard · on-screen row · Nouveautés · Précédemment shown"]
+        AUTHL["Sign-in, refusal, sign-out, refused token<br/>address move · logAuthEvent"]
         PUSHL["Every push sent — push.ts<br/>logNotificationSent"]
+        AIL["AI features — logDescribeSearch · logRecap<br/>logAskQuestion · logJusquici<br/>never the text"]
+        READL["Book reading sessions<br/>logReadingEvent"]
         BENCHL["Device test bench<br/>BenchRunner"]
         SGL["Subtitle generation<br/>subtitleGen/log.ts"]
+        TASKL["Background actions — taskLog.ts<br/>one readable line per action, never per tick"]
     end
 
     subgraph QUEUES["Kept on the device until sent — localStorage"]
@@ -577,9 +653,10 @@ flowchart LR
     end
 
     subgraph ROUTES["Routes"]
-        PLR["POST /api/player/log<br/>logPlaybackEvent — 400 detail lines/hour/account"]
+        PLR["POST /api/player/log<br/>logPlaybackEvent — 400 detail lines/hour/account<br/>a start line orders an X-Ray analysis"]
         CER["POST /api/client-error"]
-        STR["POST /api/startup-timing · /api/remote-diag<br/>/api/release-notes/event"]
+        STR["POST /api/startup-timing · /api/remote-diag<br/>/api/viewport-diag · /api/release-notes/event"]
+        BKR["POST /api/books/ID/session"]
         BNR["POST /api/player/bench"]
     end
 
@@ -591,19 +668,24 @@ flowchart LR
         STL[("startup.log")]
         AL[("auth.log")]
         NL[("notifications.log")]
+        RL[("recherche.log")]
+        LL[("lectures.log")]
         BL[("bench.log")]
         SGF[("subtitle-gen.log")]
     end
+    DLOG[("docker logs — [tâche] lines<br/>lost at each redeploy")]
 
     subgraph READERS["Who reads"]
-        ACTV["Activité — /api/admin/activity/*<br/>activity/logReader.ts · seances.ts · diagnosis.ts"]
+        ACTV["Activité — /api/admin/activity/*<br/>activity/logReader.ts · seances.ts · diagnosis.ts<br/>aiUsage.ts · readings.ts"]
         REPT["Reports — reportLogs.ts<br/>captureReportLogs freezes a snapshot"]
         PLAN["Bench plan — /api/player/bench/plan<br/>candidatesFrom recent player.log"]
+        TRIR["Library cleanup — tri/logs.ts<br/>sessions and devices per account"]
         OPS["Operator — tail and jq"]
     end
 
     NATL --> PLR
     SRVL --> PLR
+    OFFL --> PLR
     NATL -.->|"send failed"| UL
     NATL -.-> US
     NATL -.-> UPOS
@@ -618,13 +700,18 @@ flowchart LR
     BOOTL --> STR --> STL
     AUTHL --> AL
     PUSHL --> NL
+    AIL --> RL
+    READL --> BKR --> LL
     BENCHL --> BNR --> BL
     SGL --> SGF
+    TASKL --> DLOG
 
     PL --> ACTV
     SL --> ACTV
     AL --> ACTV
     NL --> ACTV
+    RL --> ACTV
+    LL --> ACTV
     BL --> ACTV
     BPL --> ACTV
     SGF --> ACTV
@@ -633,60 +720,163 @@ flowchart LR
     AL --> REPT
     NL --> REPT
     PL --> PLAN
+    PL --> TRIR
+    STL --> TRIR
+    AL --> TRIR
     STL --> OPS
+    DLOG --> OPS
 ```
 
 Player line kinds (`PlayerEventKind`): `opening`, `start`, `fallback`, `network`, `rebuild`,
-`error`, `seek`, `stall`, `audio`, `pause`, `cast`, `reserve`, `subtitle-gen`, `fluidite`, `stop`.
-Every native and server line carries `session` and `build`; incident lines carry `timeline`, and
-`stall`/`stop` carry `diag.*`. Offline downloads write one line per step (requested, started, ready,
-failed, fetched, cancelled, removed, expired, deleted) to `server.log` under `scope: "offline"`, beside
-`scope: "download"` for the original file; the Activity panel reads them there. Bench and dev lines never reach `player.log`, so they never count as
-a viewer's. Details: [Diagnostics](#diagnostics), [The playback log](#the-playback-log),
-[Device test bench](#device-test-bench), [DECISIONS §42, §82](DECISIONS.md).
+`error`, `seek`, `stall`, `audio`, `pause`, `cast`, `reserve`, `subtitle-gen`, `fluidite`,
+`debut-scene`, `stop`. Every native and server line carries `session` and `build`; incident lines
+carry `timeline`, and `stall`/`stop` carry `diag.*`. Offline downloads write one line per step
+(requested, started, ready, failed, fetched, cancelled, removed, expired, deleted) to `server.log`
+under `scope: "offline"`, beside `scope: "download"` for the original file; the Activity panel reads
+them there. Bench and dev lines never reach `player.log`, so they never count as a viewer's.
+`recherche.log` and the AI lines never hold the sentence typed, the question or the answer. Details:
+[Diagnostics](#diagnostics), [The playback log](#the-playback-log),
+[Device test bench](#device-test-bench), [DECISIONS §42, §82, §129, §135, §139](DECISIONS.md).
 
 ### 7. Requests and security
 
 ```mermaid
-flowchart TD
-    REQ["Incoming request"] --> PEER["server-boot/boot.mjs<br/>x-cine-peer = socket address<br/>clientAddressOf trusts X-Forwarded-For only from TRUSTED_PROXIES"]
-    PEER --> MATCH{"Covered by the proxy matcher?"}
-    MATCH -->|"ACTIFS_PUBLICS<br/>_next/static, icons, manifest, sw.js, offline.html, splash/"| SERVE["Served without a session"]
-    MATCH -->|"/api/reports* — HORS_PROXY"| RC["reportCaller — reportRequest.ts<br/>crossSiteWrite · session · declared size, 411 if chunked"]
-    MATCH -->|"everything else"| CSW{"crossSiteWrite?<br/>Sec-Fetch-Site, else Origin"}
-    CSW -->|"write from another site"| F403A["403"]
+flowchart LR
+    REQ["Incoming request"] --> PEER["server-boot/boot.mjs<br/>x-cine-peer = socket address<br/>clientAddressOf trusts X-Forwarded-For<br/>only from TRUSTED_PROXIES"]
+    PEER --> MATCH{"Proxy matcher?"}
+    MATCH -->|"public asset"| SERVE["ACTIFS_PUBLICS — served without a session<br/>_next/static, icons, manifest, sw.js, offline.html, splash/"]
+    MATCH -->|"/api/reports*"| RC["HORS_PROXY — reportCaller, reportRequest.ts<br/>crossSiteWrite · session · declared size, 411 if chunked"]
+    MATCH -->|"everything else"| DEC["path decoded first<br/>unreadable → 400"]
+    DEC --> CSW{"crossSiteWrite?"}
+    CSW -->|"yes"| F403A["403 — a write from another site<br/>Sec-Fetch-Site, else Origin"]
     CSW -->|"no"| SETUPQ{"setup done?"}
     SETUPQ -->|"no, a page"| TOSETUP["redirect /setup"]
     SETUPQ -->|"yes"| LOGINQ{"/login?"}
-    LOGINQ -->|"already signed in"| AWAY["redirect / or /gestion"]
+    LOGINQ -->|"signed in"| AWAY["redirect / or /gestion"]
     LOGINQ -->|"no"| IMGQ{"/_next/image?"}
-    IMGQ -->|"session or loopback"| OK1["pass"]
-    IMGQ -->|"neither"| F401I["401"]
-    IMGQ -->|"no"| PUB{"PUBLIC_PATHS?<br/>publicPaths.ts · /status, /hors-ligne"}
-    PUB -->|"yes"| OK2["pass"]
-    PUB -->|"no"| MOVED{"MOVED_PATHS?<br/>/player, /cinema"}
-    MOVED -->|"yes"| R308["308 → /"]
-    MOVED -->|"no"| CAST{"castPassFor · castPreflightFor<br/>signed pass for this title, stream or subtitle GET"}
-    CAST -->|"valid"| OK3["pass — no session, a television"]
+    IMGQ -->|"yes"| IMG["pass with a session or from loopback<br/>401 otherwise"]
+    IMGQ -->|"no"| PUB{"PUBLIC_PATHS?"}
+    PUB -->|"yes"| OK2["pass — publicPaths.ts<br/>/status · /hors-ligne · /partage · /passage<br/>/api/streamdeck — verifyStreamDeckToken in the route<br/>/api/lumen/* — answers 410"]
+    PUB -->|"no"| MOVED{"MOVED_PATHS?"}
+    MOVED -->|"yes"| R308["308 → /<br/>/player, /cinema"]
+    MOVED -->|"no"| CAST{"pass without a cookie?"}
+    CAST -->|"yes"| OK3["pass — no session<br/>castPassFor · castPreflightFor: a television, one title<br/>selfWarmPassFor: the server on loopback"]
     CAST -->|"no"| SESS{"verifySessionFull<br/>signature + SQLite revocation"}
     SESS -->|"none, /api/*"| F401["401 + x-session-expired: 1<br/>its only emitter"]
     SESS -->|"none, a page"| TOLOGIN["redirect /login?next="]
-    SESS -->|"valid"| ROLE{"role = user?"}
-    ROLE -->|"write not in GUEST_ALLOWED_MUTATIONS / PATTERNS"| F403B["403"]
-    ROLE -->|"read in ADMIN_ONLY_READS"| F403C["403"]
-    ROLE -->|"allowed, or admin"| JFTOK{"page, and Jellyfin token refused?"}
-    JFTOK -->|"yes"| REVOKE["revoke devices · auth.log token-refused<br/>redirect /login?reason=jellyfin"]
-    JFTOK -->|"no"| NEXT["pass · sliding cookie refresh · session touched"]
+    SESS -->|"share"| SHG["shareGate — share/gate.ts<br/>SHARE_RULES, a closed list<br/>each route's item checked against the shared title<br/>no sliding: ends with the link"]
+    SESS -->|"admin or user"| ROLE{"role = user?"}
+    ROLE -->|"write"| F403B["403 — not in GUEST_ALLOWED_MUTATIONS / PATTERNS"]
+    ROLE -->|"read"| F403C["403 — in ADMIN_ONLY_READS"]
+    ROLE -->|"page"| TOHOME["redirect / — in ADMIN_ONLY_PAGES"]
+    ROLE -->|"allowed, or admin"| JFTOK{"Jellyfin token refused?"}
+    JFTOK -->|"a page"| REVOKE["jellyfinToken.ts, asked at most hourly<br/>revoke devices · auth.log token-refused<br/>redirect /login?reason=jellyfin"]
+    JFTOK -->|"/api/*, an admin"| F401J["401 + x-session-expired: 1<br/>administration lost at once"]
+    JFTOK -->|"no"| NEXT["pass · sliding cookie refresh<br/>session touched"]
     NEXT --> ROUTE["Route handler"]
+    SHG --> ROUTE
     ROUTE --> ADM["/api/admin/* — adminOnly in the route"]
-    ROUTE --> LIM["Per-account limits<br/>search 120/min · ratings 30/min · player-log detail 400/h"]
+    ROUTE --> LIM["Per-account limits<br/>search 120/min · ratings 30/min · player-log detail 400/h<br/>AI calls per day · monthly AI ceiling"]
     ROUTE --> TAGS["Blocked tags — blockedTags.ts<br/>catalogue answers filtered · title routes answer as if absent<br/>newAccountTags.ts seeds new accounts"]
     ROUTE --> JSR["Jellyseerr as the viewer — jellyseerrIdentity.ts<br/>unknown identity → 503, never the API key's admin"]
+    ROUTE --> FRAME["Response framing — responseFraming.ts<br/>x-cine-encoding · x-cine-length markers<br/>boot.mjs writes the real headers"]
 ```
 
 The interface never enforces a permission: `src/proxy.ts` refuses whatever a `user` should not do,
-and a television is the only caller allowed in without a session, for one title and only for the
-stream and its subtitles. Details: CLAUDE.md "Architecture", [DECISIONS §16, §34, §54, §56, §57, §64](DECISIONS.md).
+and sends every `share` session to `shareGate`, where anything not listed does not exist. Without a
+session cookie only a television (one title, its stream and subtitles), the server's own loopback
+warm-up and the routes that carry their own check (Stream Deck token, share password, address-move
+code) get through. Details: CLAUDE.md "Architecture", [DECISIONS §16, §34, §54, §56, §57, §64, §112,
+§113, §119, §120, §130, §131](DECISIONS.md).
+
+### 8. Optional features
+
+```mermaid
+flowchart TB
+    subgraph XRAY["Actors on screen — §138"]
+        direction TB
+        XORD["XRAY_ENABLED: off · admins · tous<br/>xray/orders.ts — noteSessionStart<br/>from the start line · assertVisible<br/>inside XRAY_LIBRARY_ROOTS · no animation"]
+        XSCH["xray/scheduler.ts — library scheduler<br/>tier 0 by hand · watching · arrivals 14 days · the rest<br/>one tick a minute · state in scanStore.ts"]
+        XCL["clients/xray.ts<br/>POST /jobs · GET /items/ID/scenes · Bearer key"]
+        XRD["GET /api/player/xray/ID<br/>200 with scenes: [] and a status for every absence"]
+        XUI["PlayerOnScreen — the « À l'écran » row, hidden by default<br/>AskPanel · AskPersonHeader — person panel"]
+        SSY["Subtitle sync — subtitleSync/<br/>measured on request, corrected at display<br/>subtitle_sync keyed by the file's ETag"]
+        SCR["sceneRestart.ts — decideSceneRestart<br/>« back to the start of the scene », off by default"]
+        XSVC["laterna-xray — xray/<br/>faces, voices, scenecuts.py, subsync.py<br/>its own image and SQLite"]
+    end
+    XORD --> XCL
+    XSCH --> XCL
+    SSY --> XCL
+    XCL --> XSVC
+    XRD --> XCL
+    XUI --> XRD
+    SCR -.->|"reads the same scenes"| XRD
+
+    subgraph AIF["AI features — §140"]
+        direction TB
+        PROV["One provider, one key, one monthly ceiling<br/>subtitleGen/providers/<br/>Anthropic · OpenAI · Google"]
+        BUD["aiFeatures.ts — recordAiSpend · aiBudgetReached<br/>ai_spend_days · subtitle_gen_spend"]
+        GEN["Generated subtitles — subtitleGen/engine.ts"]
+        DESC["Description search — describeSearch.ts<br/>the model recognises, TMDB decides"]
+        RECAP["Précédemment — recap/service.ts<br/>prepared in the background"]
+        ASK["Questions, Jusqu'ici — ask/<br/>/api/cinema/ask/ID · sofarCut.ts shared with the client"]
+        GATEA["AnswerGate — sources hold only what the account watched<br/>names not in the sources withheld · no share link"]
+    end
+    GEN --> PROV
+    DESC --> PROV
+    RECAP --> PROV
+    ASK --> PROV
+    PROV --> BUD
+    RECAP --> GATEA
+    ASK --> GATEA
+
+    subgraph BOOKS["Books — §127"]
+        direction TB
+        BIX["bookIndex.ts — one shared index<br/>book-index.json · prewarm.ts after the catalogue"]
+        BRG["rights.ts — a filtered view per account<br/>Jellyfin libraries · blocked tags"]
+        BMETA["epubMeta.ts — series and authors from the OPF<br/>googleBooks.ts fills what is missing, 900 a day"]
+        BAPI["/api/books/* — list, file, cover, progress, session<br/>BOOKS_ENABLED off: every books route answers 404"]
+        BRD["/livres — foliate-js, sanitised EPUB<br/>frames without allow-scripts · own CSP<br/>opened in ReaderFrame over the cinema"]
+    end
+    BIX --> BRG --> BAPI
+    BMETA --> BIX
+    BRD --> BAPI
+
+    subgraph TRIG["Library cleanup — §198"]
+        direction TB
+        TCOL["/tri — admin only<br/>tri/collect.ts — Radarr · Sonarr titles<br/>who requested — Jellyseerr · who opened — Jellyfin, player.log<br/>kept 10 min on globalThis"]
+        TSC["tri/score.ts — titleScore · accountScore"]
+        TPL["tri/plan.ts — planRemoval<br/>torrents found by inode, download history, name and size<br/>a file linked under another title keeps its torrent"]
+        TEX["tri/execute.ts — executeRemoval, one at a time<br/>qBittorrent with files → Radarr/Sonarr deleteFiles<br/>→ Jellyseerr media → Jellyfin refresh → caches<br/>409 if the plan changed since the preview"]
+    end
+    TCOL --> TSC --> TPL --> TEX
+
+    subgraph OTHER["Share links, Stream Deck"]
+        direction TB
+        SHC["ShareControl on a title sheet — admin<br/>share/service.ts · shares table<br/>a Jellyfin account per link · swept every minute"]
+        SHV["/partage/CODE → /api/share/redeem<br/>role share · shareGate"]
+        SDK["Stream Deck — streamdeck/tokens.ts<br/>verifyStreamDeckToken · SHA-256, revocable<br/>/api/streamdeck/plays · /image"]
+    end
+    SHC --> SHV
+```
+
+Each of these is off, or reaches nothing, until an administrator configures it, and none of them
+changes how a film plays. **Actors on screen** ([DECISIONS §138, §141, §143, §151](DECISIONS.md),
+`src/lib/xray/`) are computed by a separate service, `laterna-xray`, with its own image and its own
+SQLite: it decodes each file with ffmpeg, recognises faces against TMDB photos and names voices from
+those faces. Laterna orders an analysis when a playback starts and from a background scheduler, and the
+player reads the scenes once per item. The same service measures subtitle sync on request; nothing is
+written to a media or subtitle file. The service, its API contract and its measurements:
+[xray/README.md](xray/README.md). **AI features** ([§135, §137, §139, §140](DECISIONS.md)) share the
+generated subtitles' provider, key and monthly ceiling; their sources are built on the server from what
+the account has watched only, and every answer passes the same name check before it is shown.
+**Books** ([§127–§129](DECISIONS.md)) are a mode of the cinema (`livres=1` in the hash), never a third
+tab, and the reader runs in a same-origin frame so closing a book reloads nothing. **Library cleanup**
+([§198](DECISIONS.md)) is the one place that deletes titles: a full removal goes through
+qBittorrent, Radarr/Sonarr, Jellyseerr and Jellyfin, since the library's files are hard links of what
+qBittorrent shares and the media mount is read-only here. **Share links** ([§112](DECISIONS.md)) open
+one film or one series with a password until an end date; **the Stream Deck** ([§120](DECISIONS.md))
+reads the plays in progress and their posters, nothing else.
 
 ---
 

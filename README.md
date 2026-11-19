@@ -246,7 +246,7 @@ in the app.
 | **[docs/FEATURES.md](docs/FEATURES.md)** | What the two interfaces do, feature by feature: Cinema, Management, books, Stream Deck, optional services |
 | **[docs/SECURITY.md](docs/SECURITY.md)** | Authentication and roles, sessions, what the server refuses and why |
 | **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** | Working on the code: dev stack, test gate, building from source, debugging a deployment, screenshot conventions |
-| **[ARCHITECTURE.svg](ARCHITECTURE.svg)** | The whole application on one zoomable page: system, interfaces, both players, one playback, caches, logs, security — on a phone, open it then *Raw* |
+| **[ARCHITECTURE.svg](ARCHITECTURE.svg)** | The whole application on one zoomable page: system, interfaces, both players, one playback, caches, logs, security, optional features — on a phone, open it then *Raw*; generated from DOC-TECH.md by `tools/architecture/build.sh` |
 | **[DOC-TECH.md](DOC-TECH.md)** | The in-browser player: the native path and the server player behind it, the remuxer, audio, generated subtitles, diagnostics |
 | **[PRESENTATION-LECTEUR.md](PRESENTATION-LECTEUR.md)** | A non-technical presentation of the player, in French |
 | **[docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md)** | Offline downloads: preparation by Jellyfin, storage on the device, the offline player and entry, settings — in French |

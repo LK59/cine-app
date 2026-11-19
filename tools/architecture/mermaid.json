@@ -1,0 +1,36 @@
+{
+  "theme": "base",
+  "htmlLabels": false,
+  "flowchart": {
+    "htmlLabels": false,
+    "useMaxWidth": false,
+    "wrappingWidth": 900,
+    "subGraphTitleMargin": {
+      "top": 4,
+      "bottom": 26
+    }
+  },
+  "sequence": {
+    "useMaxWidth": false,
+    "wrap": false
+  },
+  "themeVariables": {
+    "fontFamily": "-apple-system, system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+    "fontSize": "15px",
+    "primaryColor": "#eef2ff",
+    "primaryBorderColor": "#6366f1",
+    "primaryTextColor": "#111827",
+    "secondaryColor": "#f8fafc",
+    "tertiaryColor": "#f8fafc",
+    "lineColor": "#475569",
+    "clusterBkg": "#f8fafc",
+    "clusterBorder": "#94a3b8",
+    "titleColor": "#070503",
+    "edgeLabelBackground": "#ffffff",
+    "actorBkg": "#eef2ff",
+    "actorBorder": "#6366f1",
+    "noteBkgColor": "#fef9c3",
+    "noteBorderColor": "#ca8a04"
+  },
+  "markdownAutoWrap": false
+}
