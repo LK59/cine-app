@@ -131,7 +131,7 @@ starts the server with none of them, only the read-only catalogue warm-ups; `reg
 does not — adding a task means deciding whether a test copy may run it. Even so, read a test instance's
 `docker logs` two minutes after it starts, and do not leave one up for hours.
 
-**Benches sit beside the suite, all skipped unless given a file or a library root.**
+**Benches live in `benches/`, beside the suite, all skipped unless given a file or a library root.** `npx vitest run <name>` finds them there by name.
 `reprise.spec.ts` proves, on a real file, that the bytes the resume cache keeps reopen it at a
 position and produce the first segment with nothing else.
 `truehd-bench.spec.ts`

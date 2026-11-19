@@ -18,7 +18,7 @@ docker run --rm --name cine-compression-reelle -e HOME=/tmp -v "$REPO":/repo:ro 
   # Une copie : le /tmp de certains hôtes est monté noexec, et un build ne doit rien laisser dans la source.
   cd /src && tar --exclude=./node_modules --exclude=./.next --exclude=./.next-dev --exclude=./data --exclude=./.git -cf - . | tar -xf - -C /build
   cp -a /repo/node_modules /build/node_modules
-  cp /repo/compression-reelle.spec.ts /build/compression-reelle.spec.ts
+  mkdir -p /build/benches && cp /repo/benches/compression-reelle.spec.ts /build/benches/compression-reelle.spec.ts
   cd /build
   echo "[compression-reelle] next $(node -p "require(\"next/package.json\").version") — build de $(node -p "require(\"./package.json\").version")"
   if ! npx next build >/tmp/build.log 2>&1; then tail -60 /tmp/build.log; exit 1; fi
