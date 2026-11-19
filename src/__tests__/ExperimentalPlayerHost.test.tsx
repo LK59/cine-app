@@ -2802,7 +2802,9 @@ describe("le son éveillé pendant la pause (17/11/2026)", () => {
     await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
     const element = videoElement(1300);
     await act(async () => void fireEvent(element, new Event("pause")));
-    expect(calls).toEqual(["start"]);
+    // Attendu, pas supposé immédiat : sous la charge de la construction d'image, l'oscillateur partait
+    // une microtâche plus tard et le test échouait seul (19/11/2026).
+    await waitFor(() => expect(calls).toEqual(["start"]));
     Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
     try {
       await act(async () => void document.dispatchEvent(new Event("visibilitychange")));
