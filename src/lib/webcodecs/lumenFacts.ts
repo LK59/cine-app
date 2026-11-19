@@ -23,8 +23,13 @@ export function takeLumenFacts(): LumenFacts | null {
 /**
  * Les décodeurs de la chaîne « Son par Lumen » ouverts et fermés, pour la ligne `stop` (19/11/2026) :
  * une fuite — un décodeur jamais refermé dans le worker après un saut — se verrait au premier soir au
- * lieu d'attendre qu'iOS tue une page. Compté depuis le dernier bilan (une page ne lit qu'un film à
- * la fois) ; `open` est l'instant présent, et doit retomber à zéro entre deux films.
+ * lieu d'attendre qu'iOS tue une page.
+ *
+ * **Cumulé depuis le chargement de la page, jamais remis à zéro** : le bilan d'une séance est
+ * réécrit sur l'appareil pendant qu'elle dure (`unsentStop`), et une lecture qui remettait à zéro
+ * rendait des « o0 » trompeurs au vrai `stop` (relevé le 19/11/2026). `o − c` est ce qui reste ouvert ;
+ * à l'arrêt, le pipeline du film tient encore ses décodeurs (`n` vaut 1 ou 2) — une fuite se lit à
+ * `n` qui grandit d'un film à l'autre dans la même page.
  */
 const counts = { opened: 0, closed: 0, open: 0, maxOpen: 0, workers: 0, lost: 0, mainThread: 0 };
 
@@ -48,14 +53,18 @@ export function noteLumenWorker(event: "created" | "lost" | "mainThread"): void 
 
 /**
  * Le champ du bilan, `lumenDec: "o12 c11 n1 m2 w1 l0 p0"` — ouverts, fermés, ouverts maintenant, au plus
- * en même temps, workers créés, perdus, décodeurs sur le fil principal —, absent quand rien ne s'est
- * ouvert : la ligne de toute séance sans son décodé ne change pas. Remis à zéro sauf `n`.
+ * en même temps, workers créés, perdus, décodeurs sur le fil principal, depuis le chargement de la
+ * page —, absent tant que rien ne s'est ouvert : la ligne d'une page sans son décodé ne change pas.
+ * Se lit autant de fois qu'on veut.
  */
-export function takeLumenDecoderField(): { lumenDec?: string } {
-  if (counts.opened === 0 && counts.closed === 0 && counts.open === 0 && counts.workers === 0 && counts.lost === 0) return {};
-  const field = `o${counts.opened} c${counts.closed} n${counts.open} m${counts.maxOpen} w${counts.workers} l${counts.lost} p${counts.mainThread}`;
-  Object.assign(counts, { opened: 0, closed: 0, maxOpen: counts.open, workers: 0, lost: 0, mainThread: 0 });
-  return { lumenDec: field };
+export function lumenDecoderField(): { lumenDec?: string } {
+  if (counts.opened === 0 && counts.workers === 0 && counts.lost === 0 && counts.mainThread === 0) return {};
+  return { lumenDec: `o${counts.opened} c${counts.closed} n${counts.open} m${counts.maxOpen} w${counts.workers} l${counts.lost} p${counts.mainThread}` };
+}
+
+/** Pour les tests : la page rechargée. */
+export function resetLumenDecoderCounts(): void {
+  Object.assign(counts, { opened: 0, closed: 0, open: 0, maxOpen: 0, workers: 0, lost: 0, mainThread: 0 });
 }
 
 export const LUMEN_DEC_VALUE = /^o\d{1,5} c\d{1,5} n\d{1,4} m\d{1,4} w\d{1,4} l\d{1,4} p\d{1,4}$/;

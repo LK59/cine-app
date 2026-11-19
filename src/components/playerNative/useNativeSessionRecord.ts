@@ -34,7 +34,7 @@ import { endSceneRestart, sceneRestartLogFields } from "@/lib/sceneRestartSessio
 import { beatStopFields } from "@/lib/progressBeat";
 import { endXrayUsage, xrayLogFields } from "@/lib/xrayUsage";
 import { endReplayUsage, replayLogFields } from "@/lib/replaySubtitles";
-import { takeLumenDecoderField } from "@/lib/webcodecs/lumenFacts";
+import { lumenDecoderField } from "@/lib/webcodecs/lumenFacts";
 import { endOnScreenSession } from "@/lib/onScreenSession";
 
 /**
@@ -154,7 +154,7 @@ export function useNativeSessionRecord({
         // Les sous-titres d'un passage rejoué (§150) — rien tant qu'aucune aide n'a paru.
         ...replayLogFields(itemId),
         // Les décodeurs « Son par Lumen » de la séance (§197) — absent sans son décodé.
-        ...takeLumenDecoderField(),
+        ...lumenDecoderField(),
       };
     },
     [tally, watched, intendedPosition, slowFields, describeFileRef, pathRef, remuxRef, videoElRef, lastVideoElRef, mountedAtRef, everReadyRef, itemId]
