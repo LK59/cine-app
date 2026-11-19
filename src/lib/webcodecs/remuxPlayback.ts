@@ -7,6 +7,7 @@
 
 import { probeDecodingInfo } from "./decodingInfo";
 import type { DialogueMode } from "./dialogueEnhance";
+import { takeLumenFacts } from "./lumenFacts";
 import { displayIsHdr, hdrLightCap } from "./hdrDisplay";
 import { NO_INDEX_REACH_SECONDS, reachable } from "./seekArrival";
 import { playerWarning, type PlayerWarning } from "./playerWarning";
@@ -304,6 +305,10 @@ async function probeOpened(source: ByteSource, options: RemuxPlaybackOptions, li
   trace(`piste audio retenue : ${audioTrack ? `${audioTrack.codecId} ${audioTrack.audio?.channels ?? "?"}ch ${audioTrack.language ?? "?"}` : "aucune"}`);
   if (options.dialogue && options.dialogue !== "off") trace(`dialogues améliorés demandés (${options.dialogue === "strong" ? "encore plus fort" : "normal"})`);
 
+  // Ce que « Son par Lumen » a noté pour un pipeline précédent (un saut y rouvre le décodeur après sa
+  // ligne `start`) ne doit pas se lire comme celui de cette ouverture : la ligne de *JoJo* annonçait le
+  // DTS de l'épisode d'avant (19/11/2026). Oublié ici, juste avant d'ouvrir.
+  takeLumenFacts();
   const chosen = await choosePlaybackPath({
     source,
     file,
