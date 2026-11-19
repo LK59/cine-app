@@ -333,3 +333,16 @@ export async function warmTrueHd(): Promise<void> {
     })
   );
 }
+
+/**
+ * Le même préchauffage pour le module AC-3/E-AC3/DTS (« Son par Lumen », §197) : le worker et le
+ * module, téléchargés sans être exécutés.
+ */
+export async function warmAc3Dts(): Promise<void> {
+  await Promise.all(
+    [new URL("./truehdWorker.mjs", import.meta.url), new URL("../ac3dts/ac3dts-wasm.mjs", import.meta.url)].map(async (url) => {
+      const response = await fetch(url);
+      await response.arrayBuffer();
+    })
+  );
+}

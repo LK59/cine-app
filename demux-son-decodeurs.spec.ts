@@ -14,7 +14,7 @@ import { SoftwareAudioTrack } from "@/lib/webcodecs/softwareAudio";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
 
 const WINDOW = Number(process.env.DS_SECONDS ?? 30);
-const CODECS = new Set(["A_AC3", "A_EAC3", "A_DTS"]);
+const CODECS = new Set(["A_AC3", "A_EAC3", "A_DTS", "A_FLAC"]);
 
 function fileSource(path: string): ByteSource {
   const fd = openSync(path, "r");

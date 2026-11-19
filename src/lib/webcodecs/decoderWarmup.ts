@@ -1,5 +1,7 @@
 "use client";
 
+import { lumenAudioOn } from "@/lib/lumenAudio";
+
 // Le préchauffage des décodeurs du lecteur — un module à part, et atteint seulement derrière une
 // frontière `ssr: false` (`DecoderWarmup`, `PlayerOnboarding`).
 //
@@ -28,6 +30,12 @@ export function warmPlayerDecoders(): void {
   try {
     const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
     if (connection?.saveData) return;
+    // « Son par Lumen » (§197) : nos décodeurs AC-3/E-AC3/DTS et libFLAC, et rien de mediabunny.
+    if (lumenAudioOn()) {
+      void import("@wasm-audio-decoders/flac").catch(() => {});
+      void import("@/lib/webcodecs/truehd/truehdDecoder").then((m) => Promise.all([m.warmAc3Dts(), m.warmTrueHd()])).catch(() => {});
+      return;
+    }
     void import("mediabunny").catch(() => {});
     void import("@mediabunny/ac3").catch(() => {});
     void import("@mediabunny/dts").catch(() => {});

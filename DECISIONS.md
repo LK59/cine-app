@@ -12429,5 +12429,10 @@ piste qui se tait 45 s (`GIVE_UP_S`) est finie pour cette lecture, au lieu de li
 `fixtures/ac3dts`), `webcodecs-decoderClasses`, `lumen-audio-worker-failure` (une panne mène au lecteur serveur, jamais
 au silence), la route dans `misc-routes-batch2`. Empreintes du lecteur inchangées.
 
-**À faire avant de l'allumer pour tous.** Séances réelles (iPhone, Opus d'animation, AAC refusé), lecture du journal,
-puis retrait de mediabunny du lecteur (le FLAC hérite encore de sa classe de base).
+**Sans mediabunny** (10.62.1). Allumé, le lecteur ne charge plus mediabunny du tout : le FLAC est décodé par libFLAC
+directement (`flacOpener`, l'en-tête de `flacHeader.ts`), l'Opus et l'AAC par l'AudioDecoder du navigateur après un
+`isConfigSupported` (un AAC refusé repart vers le décodeur AAC en WebAssembly, comme avant), et le préchauffage
+télécharge nos modules au lieu des siens. `lumen-audio-sans-mediabunny.test.ts` échoue si un import revient.
+
+**À faire avant de l'allumer pour tous.** Séances réelles (iPhone, Opus d'animation, AAC refusé), lecture du journal ;
+ensuite, retirer mediabunny des dépendances (il ne resterait que le chemin coupé et les bancs de comparaison).

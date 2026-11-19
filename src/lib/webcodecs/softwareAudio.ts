@@ -179,6 +179,19 @@ export class SoftwareAudioTrack {
     return new SoftwareAudioTrack(produce, { sampleRate: track.format.sampleRate, numberOfChannels: channels }, () => track.close());
   }
 
+  /** Une piste ouverte par nos paquets (ownAudio.ts), rangée comme les autres — l'AAC à PCE compris. */
+  private static fromOwn(own: import("./ownAudio").OwnAudioTrack, codecId: string | undefined, file: MatroskaFile, trackNumber: number): SoftwareAudioTrack {
+    lastOwnDemux = own;
+    const shape = codecId === "A_AAC" ? aacShaping(file, trackNumber, own.format.numberOfChannels) : null;
+    if (codecId === "A_AAC") lastAacRoute = "browser-decode";
+    const produce = shape?.rows
+      ? (fromSeconds: number) => remapped(own.samples(fromSeconds), shape.rows!)
+      : shape && shape.channels < own.format.numberOfChannels
+        ? (fromSeconds: number) => firstPlanes(own.samples(fromSeconds), shape.channels)
+        : (fromSeconds: number) => own.samples(fromSeconds);
+    return new SoftwareAudioTrack(produce, { sampleRate: own.format.sampleRate, numberOfChannels: shape ? shape.channels : own.format.numberOfChannels }, () => {});
+  }
+
   private static async openWithMediabunny(
     source: ByteSource,
     trackNumber: number,
@@ -187,6 +200,17 @@ export class SoftwareAudioTrack {
     demux?: "nôtre",
     decoders?: "nôtres"
   ): Promise<SoftwareAudioTrack> {
+    // « Son par Lumen » complet (§197) : nos paquets et nos décodeurs — mediabunny n'est ni chargé
+    // ni consulté. Le FLAC par libFLAC directement, l'Opus et l'AAC par l'AudioDecoder du navigateur.
+    if (demux === "nôtre" && decoders === "nôtres" && file) {
+      let own;
+      try {
+        own = await (await import("./ownAudio")).openOwnAudioTrack(null, source, file, trackNumber, "nôtres");
+      } catch (error) {
+        throw new Error(`décodeur audio non chargé (${error instanceof Error ? error.message : "import échoué"})`);
+      }
+      return SoftwareAudioTrack.fromOwn(own, codecId, file, trackNumber);
+    }
     // Dynamic, and only the extension this file actually needs: the two are a megabyte and a
     // half each, and a file whose audio the browser already decodes never pays for either.
     let core;
@@ -209,16 +233,8 @@ export class SoftwareAudioTrack {
       throw new Error(`décodeur audio non chargé (${error instanceof Error ? error.message : "import échoué"})`);
     }
     if (demux === "nôtre" && file) {
-      const own = (await import("./ownAudio")).openOwnAudioTrack(core, source, file, trackNumber, decoders ?? "mediabunny");
-      lastOwnDemux = own;
-      const shape = codecId === "A_AAC" ? aacShaping(file, trackNumber, own.format.numberOfChannels) : null;
-      if (codecId === "A_AAC") lastAacRoute = "browser-decode";
-      const produce = shape?.rows
-        ? (fromSeconds: number) => remapped(own.samples(fromSeconds), shape.rows!)
-        : shape && shape.channels < own.format.numberOfChannels
-          ? (fromSeconds: number) => firstPlanes(own.samples(fromSeconds), shape.channels)
-          : (fromSeconds: number) => own.samples(fromSeconds);
-      return new SoftwareAudioTrack(produce, { sampleRate: own.format.sampleRate, numberOfChannels: shape ? shape.channels : own.format.numberOfChannels }, () => {});
+      const own = await (await import("./ownAudio")).openOwnAudioTrack(core, source, file, trackNumber, decoders ?? "mediabunny");
+      return SoftwareAudioTrack.fromOwn(own, codecId, file, trackNumber);
     }
     const { AudioSampleSink } = core;
     const input = await sharedInput(source, core, file?.mp4 !== undefined);

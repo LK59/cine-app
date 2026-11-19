@@ -20,6 +20,7 @@ import {
 import { decoderClassFor } from "./decoderClasses";
 import { openAc3DtsDecoder } from "./truehd/truehdDecoder";
 import { noteLumenFacts } from "./lumenFacts";
+import { streamInfoHeader } from "./flacHeader";
 
 /** Combien de son par message au worker : un quart de seconde, comme le TrueHD (truehdAudio.ts). */
 const BATCH_S = 0.25;
@@ -186,6 +187,48 @@ function webCodecsOpener(config: AudioDecoderConfig) {
   };
 }
 
+/**
+ * Le FLAC par libFLAC (@wasm-audio-decoders/flac), sans mediabunny : exactement ce que fait
+ * flacDecoder.ts — STREAMINFO seul en en-tête (`streamInfoHeader`, le PADDING de *Martin Guerre*
+ * faisait planter libFLAC), un paquet à la fois, l'instant du paquet sur la trame rendue.
+ */
+function flacOpener(config: AudioDecoderConfig) {
+  return async (onFrame: (f: RawFrame) => void, onError: (e: unknown) => void): Promise<PacketDecoder> => {
+    const { FLACDecoder } = await import("@wasm-audio-decoders/flac");
+    let decoder: InstanceType<typeof FLACDecoder> | null = new FLACDecoder();
+    await decoder.ready;
+    const description = config.description;
+    if (description) {
+      const bytes = ArrayBuffer.isView(description)
+        ? new Uint8Array(description.buffer, description.byteOffset, description.byteLength)
+        : new Uint8Array(description as ArrayBuffer);
+      await decoder.decodeFrames([streamInfoHeader(bytes)]);
+    }
+    return {
+      decode: async (p: DemuxedAudioPacket) => {
+        try {
+          if (!decoder) throw new Error("décodeur FLAC non initialisé");
+          const decoded = await decoder.decodeFrames([p.data]);
+          if (decoded.samplesDecoded === 0) {
+            // Une trame vide qui dit pourquoi est une erreur ; vide sans rien dire, libFLAC lit devant.
+            if (decoded.errors.length > 0) throw new Error(`FLAC illisible : ${decoded.errors[0].message}`);
+            return;
+          }
+          const frames = decoded.samplesDecoded;
+          onFrame({ planes: decoded.channelData.map((plane) => plane.slice(0, frames)), sampleRate: decoded.sampleRate, timestamp: p.timestamp });
+        } catch (error) {
+          onError(error);
+        }
+      },
+      flush: async () => {},
+      close: () => {
+        decoder?.free();
+        decoder = null;
+      },
+    };
+  };
+}
+
 export interface OwnAudioTrack {
   format: { sampleRate: number; numberOfChannels: number };
   samples(fromSeconds: number): AsyncGenerator<DecodedFrame>;
@@ -199,14 +242,15 @@ export interface OwnAudioTrack {
  * Ouvre une piste par nos paquets. Lève, avec la raison, quand ce chemin ne sait pas la prendre
  * (codec inconnu, classe de décodeur jamais notée) : l'appelant reprend alors le chemin de mediabunny.
  */
-export function openOwnAudioTrack(
-  core: Core,
+export async function openOwnAudioTrack(
+  /** mediabunny — seulement pour ses décodeurs (`decoders: "mediabunny"`, les bancs) ; `null` avec les nôtres. */
+  core: Core | null,
   source: ByteSource,
   file: MatroskaFile,
   trackNumber: number,
   /** "nôtres" : AC-3/E-AC3/DTS par notre module FFmpeg 7.1.5 plutôt que par ceux de mediabunny. */
   decoders: "mediabunny" | "nôtres" = "mediabunny"
-): OwnAudioTrack {
+): Promise<OwnAudioTrack> {
   const track = file.tracks.find((t) => t.number === trackNumber && t.type === "audio");
   if (!track) throw new Error(`piste son ${trackNumber} introuvable`);
   const names = codecNamesFor(track.codecId, track.codecPrivate);
@@ -221,14 +265,22 @@ export function openOwnAudioTrack(
   };
   let opener;
   let decoderName: string;
-  const Custom = decoderClassFor(names.name, config);
+  const Custom = decoders === "mediabunny" ? decoderClassFor(names.name, config) : null;
   if (decoders === "nôtres" && (names.name === "ac3" || names.name === "eac3" || names.name === "dts")) {
     opener = ownWasmOpener(names.name);
     decoderName = `ffmpeg-7.1.5-${names.name}`;
-  } else if (Custom) {
+  } else if (decoders === "nôtres" && names.name === "flac") {
+    opener = flacOpener(config);
+    decoderName = "flac";
+  } else if (Custom && core) {
     opener = customOpener(core, Custom, names.name, config);
     decoderName = names.name === "flac" ? "flac" : `mediabunny-${names.name === "dts" ? "dts" : "ac3"}`;
   } else if (names.name === "opus" || names.name === "aac") {
+    // Demandé au navigateur avant d'ouvrir, comme `canDecode` le faisait : un AAC refusé repart alors
+    // vers le décodeur AAC en WebAssembly (softwareAudio.ts), au lieu d'échouer en pleine lecture.
+    const Decoder = (globalThis as { AudioDecoder?: typeof AudioDecoder }).AudioDecoder;
+    const answer = Decoder ? await Decoder.isConfigSupported(config).catch(() => null) : null;
+    if (!answer?.supported) throw new Error(`le décodeur logiciel refuse ${names.name}`);
     opener = webCodecsOpener(config);
     decoderName = "navigateur";
   } else {
