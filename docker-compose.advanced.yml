@@ -10,7 +10,8 @@
 # opens on first launch unless .env already sets Jellyfin, TMDB and Radarr or Sonarr.
 #
 # Updating: docker compose pull && docker compose up -d
-# Pinning or rolling back: replace `latest` with a commit tag (ghcr.io/lk59/cine-app:<sha>).
+# `latest` is the latest release. Pinning or rolling back: a release number (ghcr.io/lk59/cine-app:10.65.1);
+# following the code day to day: `edge`.
 
 networks:
   media_net:

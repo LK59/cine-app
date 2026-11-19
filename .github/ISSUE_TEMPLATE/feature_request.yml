@@ -1,0 +1,25 @@
+name: Idea or feature request
+description: Something Laterna could do, or do better.
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening one, have a look at [the feature list](https://laterna.fr/en/features/) and [what was built then removed, or set aside](https://github.com/LK59/laterna/blob/main/docs/abandons.md) — some ideas have a history.
+  - type: textarea
+    id: need
+    attributes:
+      label: What you would like to do
+      description: The situation and the need, rather than a solution — « on a slow connection abroad, I would like … ».
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How it could work
+      description: Optional — a sketch of the behaviour or the screen you have in mind.
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Optional — devices, how many people use your installation, anything that helps weigh it.

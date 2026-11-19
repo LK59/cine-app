@@ -1095,11 +1095,22 @@ is set) creates the admin account and asks for Jellyfin, TMDB and Radarr/Sonarr.
 configured through `.env` are detected and skip it. The minimal compose is `docker-compose.example.yml`;
 the annotated one is `docker-compose.advanced.yml`.
 
-`RUNBOOK.private.md` has the operator's checklist. Push to `main` triggers the GHCR publish, whose
+`RUNBOOK.private.md` has the operator's checklist. Push to `main` publishes the image's **`edge`** channel (`:edge`, `:<sha>`), whose
 first job is the same verify workflow. `./data:/app/data` is the only writable volume — SQLite,
 the image cache, and the player log all live there. Never commit `.env`, `data/`, or `*.db*`.
 Behind a reverse proxy, set `TRUSTED_PROXIES` (deployment option, `.env`) to the proxy's container
 name.
+
+**Two channels: production follows `main`, the public follows releases** (since 19/11/2026,
+`.github/workflows/docker.yml`). The household's production is built on this host from `main` and
+deployed as before, as often as needed. A push to `main` publishes only `ghcr.io/lk59/{laterna,cine-app}:edge`
+(and `:<sha>`) — never `:latest`. **A GitHub release is what reaches other installations**: publishing one
+(`gh release create vX.Y.Z --target main --latest`, the tag on a commit that contains the current
+workflow) builds that commit and tags it `:X.Y.Z`, `:X.Y`, `:stable` and `:latest`, under both image
+names. Cut a release only once a version has run in production for a few days without regressions
+(the player log's fallbacks, `server.log`), with notes in English drawn from the versions it gathers;
+releases are spaced, deployments are not. A release whose tag points at a commit older than this
+workflow builds nothing (GitHub runs the workflow file of the tagged commit).
 
 **Before each deployment, the version in `package.json` is chosen by the weight of what ships** —
 major for a redesign, minor for new features or a batch of behaviour changes, patch for fixes

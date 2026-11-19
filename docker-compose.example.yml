@@ -10,7 +10,7 @@
 # Each optional line below is commented, with what it is for. Guide: DEPLOYMENT.md. Variables: ENV.md.
 services:
   cine-app:
-    image: ghcr.io/lk59/cine-app:latest   # or a commit tag (ghcr.io/lk59/cine-app:<sha>) to pin a version
+    image: ghcr.io/lk59/cine-app:latest   # the latest release; :10.65.1 to pin one, :edge to follow main
     container_name: cine-app              # the name the commands in the guide use
     restart: unless-stopped
 

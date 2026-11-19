@@ -1,0 +1,54 @@
+name: Bug report
+description: Something does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. A good report names the version, the device and the browser — playback problems almost always depend on them.
+        **Questions and setup help** belong in [Discussions](https://github.com/LK59/laterna/discussions). **Security issues**: please report them privately (see [SECURITY.md](https://github.com/LK59/laterna/blob/main/SECURITY.md)), not here.
+  - type: input
+    id: version
+    attributes:
+      label: Laterna version
+      description: Shown at the bottom of Management's sidebar and in Cinema → Account (e.g. « Laterna 10.65.1 »).
+      placeholder: "10.65.1"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and browser
+      description: Device, operating system, browser — and whether Laterna is installed to the home screen.
+      placeholder: "iPhone 15, iOS 18.7, Safari, installed to the home screen"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      description: The steps, and for playback the title's file format if you know it (container, video and audio codecs — Cinema → a title → Details shows them).
+      placeholder: |
+        1. Open …
+        2. Press …
+        3. …
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        For playback, the player reports what it did in `player.log`; for server errors, `server.log`. As an administrator: Management → Activity → Logs, or
+        `docker exec cine-app tail -n 50 /app/data/logs/player.log`. **Remove account names and titles you'd rather not share** before pasting.
+      render: text
+  - type: textarea
+    id: setup
+    attributes:
+      label: Setup
+      description: Optional — how it is deployed (reverse proxy, Jellyfin version, which optional services are connected).

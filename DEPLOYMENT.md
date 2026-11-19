@@ -22,7 +22,7 @@ repository, install Node, or write an `.env` file.
 
 | | |
 |---|---|
-| **Image** | `ghcr.io/lk59/cine-app:latest`, public. Also tagged by commit (`ghcr.io/lk59/cine-app:<sha>`) to pin or roll back |
+| **Image** | `ghcr.io/lk59/cine-app:latest`, public — the same image is also published as `ghcr.io/lk59/laterna`. `latest` and `stable` are the latest [release](https://github.com/LK59/laterna/releases); each release also has its number (`:10.65.1`, `:10.65`) to pin or roll back; `edge` follows the code day to day |
 | **Architecture** | `linux/amd64` |
 | **Listens on** | port `3000` inside the container, plain HTTP |
 | **Runs as** | uid `1001`, gid `1001`, not root |
@@ -56,7 +56,7 @@ Create an empty folder, save this as `docker-compose.yml` inside it. It is
 # Each optional line below is commented, with what it is for. Guide: DEPLOYMENT.md. Variables: ENV.md.
 services:
   cine-app:
-    image: ghcr.io/lk59/cine-app:latest   # or a commit tag (ghcr.io/lk59/cine-app:<sha>) to pin a version
+    image: ghcr.io/lk59/cine-app:latest   # the latest release; :10.65.1 to pin one, :edge to follow main
     container_name: cine-app              # the name the commands in the guide use
     restart: unless-stopped
 
@@ -486,8 +486,9 @@ docker compose up -d
 Database migrations run at startup. Open tabs reload themselves to the new version the next time
 nothing is playing. `docker image prune` reclaims the old images.
 
-**Pin or roll back** by replacing `latest` with a commit tag:
-`image: ghcr.io/lk59/cine-app:<sha>`, then `docker compose up -d`.
+**Pin or roll back** by replacing `latest` with a release number:
+`image: ghcr.io/lk59/cine-app:10.65.1`, then `docker compose up -d`. To follow the code day to day
+instead of the releases, use `:edge` — it is what `main` builds, before it becomes a release.
 
 ### Backups
 

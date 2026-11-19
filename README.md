@@ -226,6 +226,10 @@ in the app.
 
 ## Documentation
 
+**Questions and setup help:** [Discussions](https://github.com/LK59/laterna/discussions) · **Bugs and ideas:**
+[Issues](https://github.com/LK59/laterna/issues/new/choose) · **Security:** [report privately](SECURITY.md) ·
+**What changed:** [Releases](https://github.com/LK59/laterna/releases)
+
 | Document | What it covers |
 |---|---|
 | **[QUICKSTART.md](QUICKSTART.md)** | The three commands and the assistant, from an empty folder to a working cinema |

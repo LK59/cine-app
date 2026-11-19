@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or help with installing
+    url: https://github.com/LK59/laterna/discussions
+    about: Setup, reverse proxy, Jellyfin connection, « how do I … » — ask in Discussions.
+  - name: Security vulnerability
+    url: https://github.com/LK59/laterna/security/advisories/new
+    about: Please report it privately, never in a public issue.

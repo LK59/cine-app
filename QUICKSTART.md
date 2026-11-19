@@ -35,7 +35,7 @@ Create an empty folder and save this as `docker-compose.yml` inside it. It is
 # Each optional line below is commented, with what it is for. Guide: DEPLOYMENT.md. Variables: ENV.md.
 services:
   cine-app:
-    image: ghcr.io/lk59/cine-app:latest   # or a commit tag (ghcr.io/lk59/cine-app:<sha>) to pin a version
+    image: ghcr.io/lk59/cine-app:latest   # the latest release; :10.65.1 to pin one, :edge to follow main
     container_name: cine-app              # the name the commands in the guide use
     restart: unless-stopped
 
@@ -223,7 +223,8 @@ docker compose pull && docker compose up -d
 ```
 
 Migrations run at startup; open tabs move to the new version when nothing is playing. To pin a
-version, replace `latest` with a commit tag (`ghcr.io/lk59/cine-app:<sha>`).
+version, replace `latest` with a release number (`ghcr.io/lk59/cine-app:10.65.1`) — the list is on
+[the releases page](https://github.com/LK59/laterna/releases).
 
 **Back up** the volume, container stopped (the image cache rebuilds itself):
 

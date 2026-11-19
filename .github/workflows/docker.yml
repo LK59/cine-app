@@ -1,8 +1,17 @@
 name: Build and publish Docker image
 
+# Deux canaux (19/11/2026) :
+# - un push sur main publie `:edge` et `:<commit>` — le travail du jour, pour qui veut le suivre ;
+# - une release publiée sur GitHub publie `:X.Y.Z`, `:X.Y`, `:stable` et `:latest`. `latest` n'est donc
+#   plus « le dernier commit » mais la dernière version annoncée : c'est ce qu'un compose collé tel quel
+#   doit tirer. Les releases s'espacent ; la production de la maison, construite sur place, n'en dépend pas.
+# Chaque image paraît sous deux noms : ghcr.io/lk59/laterna, et ghcr.io/lk59/cine-app, l'ancien, gardé
+# pour toujours (les installations existantes le tirent).
 on:
   push:
     branches: [main]
+  release:
+    types: [published]
 
 # Rien par défaut ; le job de publication demande lui-même ce qu'il lui faut (paquets).
 permissions:
@@ -50,6 +59,26 @@ jobs:
       - name: Short commit ref
         id: ref
         run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      # Les étiquettes selon le canal : edge + commit sur main, version + stable + latest sur une release.
+      - name: Image tags
+        id: tags
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -eu
+          if [ "$EVENT" = "release" ]; then
+            v="${TAG#v}"
+            case "$v" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "étiquette de release inattendue : $TAG" >&2; exit 1 ;; esac
+            names="$v ${v%.*} stable latest $GITHUB_SHA"
+          else
+            names="edge $GITHUB_SHA"
+          fi
+          {
+            echo "list<<EOF"
+            for n in $names; do echo "ghcr.io/lk59/laterna:$n"; echo "ghcr.io/lk59/cine-app:$n"; done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
@@ -62,8 +91,9 @@ jobs:
           build-args: |
             BUILD_REF=${{ steps.ref.outputs.short }}
             SKIP_TESTS=1
-          tags: |
-            ghcr.io/lk59/cine-app:latest
-            ghcr.io/lk59/cine-app:${{ github.sha }}
+          tags: ${{ steps.tags.outputs.list }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/LK59/laterna
+            org.opencontainers.image.title=Laterna
           cache-from: type=gha
           cache-to: type=gha,mode=max
