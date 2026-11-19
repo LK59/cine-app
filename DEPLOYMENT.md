@@ -650,6 +650,8 @@ both visible, and revocable, in Jellyfin's dashboard.
 ## Related documentation
 
 - **[ENV.md](ENV.md)** — every variable, its default, and where else it is set.
-- **[README.md](README.md)** — what the two interfaces do, feature by feature.
+- **[README.md](README.md)** — what Laterna is, in one page.
+- **[docs/FEATURES.md](docs/FEATURES.md)** — what the two interfaces do, feature by feature.
+- **[docs/SECURITY.md](docs/SECURITY.md)** — authentication, roles and sessions.
 - **[DOC-TECH.md](DOC-TECH.md)** — the in-browser player: the native path and the server player
   behind it, the remuxer, audio delivery, generated subtitles and diagnostics.

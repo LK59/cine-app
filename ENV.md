@@ -159,7 +159,7 @@ Set in the app: **Management → Configuration → Casting and offline**. Applie
 ## Books
 
 Optional, off by default: a grid of the EPUB files in Jellyfin's libraries and an in-app reader
-(see the README). Turned off, every books route answers « not found » and no books code loads.
+(see [docs/FEATURES.md](docs/FEATURES.md#books-optional)). Turned off, every books route answers « not found » and no books code loads.
 
 Set in the app: **Management → Configuration → Books**. The requests and Google Books cards say they
 do nothing while books are off.
