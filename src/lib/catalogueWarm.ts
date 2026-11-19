@@ -1,5 +1,6 @@
 import { catalogueMembers } from "@/lib/catalogueMembers";
 import { taskLog } from "@/lib/taskLog";
+import { setupDone } from "@/lib/settings/setup";
 import { asJellyfinWitness } from "@/lib/jellyfinBreaker";
 import {
   cachedJellyfinFirstEpisodes,
@@ -21,9 +22,24 @@ import {
 const FIRST_READ_DELAY_MS = 2_000;
 
 let started = false;
+/** Une installation neuve attend la fin de l'assistant avant de lire ses services (voir plus bas). */
+let awaitingSetup: ReturnType<typeof setInterval> | null = null;
 
 export function startCatalogueWarm(): void {
   if (started) return;
+  // Pas avant la fin de l'assistant (19/11/2026, installation à blanc) : sur une installation neuve, la
+  // lecture partait vers l'adresse par défaut de Jellyfin, et une erreur « jellyfin:8096 ne répond pas »
+  // était la première chose qu'on lisait dans les journaux en y cherchant le code d'installation.
+  if (!setupDone()) {
+    awaitingSetup ??= setInterval(() => {
+      if (!setupDone()) return;
+      if (awaitingSetup) clearInterval(awaitingSetup);
+      awaitingSetup = null;
+      startCatalogueWarm();
+    }, 30_000);
+    awaitingSetup.unref?.();
+    return;
+  }
   started = true;
   startKeptCacheRefresh();
   const first = setTimeout(() => {
@@ -44,7 +60,7 @@ export function startCatalogueWarm(): void {
       // `selfWarm.ts`. Importé ici et pas en tête : le module tire `node:crypto`.
       .then(() => import("@/lib/selfWarm"))
       .then(({ runSelfWarm }) => runSelfWarm())
-      .then(() => taskLog("catalogue", "listes et catalogues chargés en mémoire", { s: (Date.now() - startedAt) / 1000 }))
+      .then(() => taskLog("catalogue", "library lists and catalogues loaded in memory", { s: (Date.now() - startedAt) / 1000 }))
       .catch(() => {})
       // Fini, réussi ou non : ce qui attend son tour pour ne pas lui faire concurrence peut partir. Un
       // symbole partagé plutôt qu'un import : ce module ne dépend de rien d'autre.

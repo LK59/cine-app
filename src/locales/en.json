@@ -3339,7 +3339,7 @@
     "welcome": {
       "text": "This assistant helps you connect Laterna to your services. It stays open until you click “Finish”: you can leave and come back.",
       "language": "Interface language",
-      "urls": "Addresses are seen from inside the container: on a shared Docker network, use the container name (http://radarr:7878); otherwise the server's IP address. “localhost” means the container itself.",
+      "urls": "Addresses are seen from inside the container: on a shared Docker network, use the container name (http://jellyfin:8096); otherwise the server's IP address. “localhost” means the container itself.",
       "env": "A value already present in your .env fills its field automatically."
     },
     "admin": {
@@ -3371,6 +3371,7 @@
     "testFail": {
       "unauthorized": "Refused: the key or password is wrong.",
       "unreachable": "Unreachable: check the address from inside the container.",
+      "localhost": "Unreachable: “localhost” is the Laterna container itself. On a shared Docker network, use the container's name (http://jellyfin:8096); otherwise the server's IP address.",
       "timeout": "No answer within 6 seconds.",
       "other": "Failed ({detail})."
     },
@@ -3393,7 +3394,8 @@
     "source": {
       "app": "Set here",
       "env": "From .env",
-      "default": "Default value"
+      "default": "Default value",
+      "unset": "Not set"
     },
     "envOverride": "This value replaces the one in your .env: it is the one in use.",
     "resetEnv": "Back to the .env value",

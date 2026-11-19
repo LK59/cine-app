@@ -3339,7 +3339,7 @@
     "welcome": {
       "text": "Cet assistant vous guide pour brancher Laterna sur vos services. Il reste ouvert tant que vous n'avez pas cliqué sur « Terminer » : vous pouvez le quitter et y revenir.",
       "language": "Langue de l'interface",
-      "urls": "Les adresses demandées sont vues depuis le conteneur : sur un réseau Docker partagé, utilisez le nom du conteneur (http://radarr:7878) ; sinon l'adresse IP du serveur. « localhost » désigne le conteneur lui-même.",
+      "urls": "Les adresses demandées sont vues depuis le conteneur : sur un réseau Docker partagé, utilisez le nom du conteneur (http://jellyfin:8096) ; sinon l'adresse IP du serveur. « localhost » désigne le conteneur lui-même.",
       "env": "Une valeur déjà présente dans votre .env remplit le champ automatiquement."
     },
     "admin": {
@@ -3371,6 +3371,7 @@
     "testFail": {
       "unauthorized": "Refusé : la clé ou le mot de passe ne convient pas.",
       "unreachable": "Injoignable : vérifiez l'adresse depuis le conteneur.",
+      "localhost": "Injoignable : « localhost » désigne le conteneur Laterna lui-même. Sur un réseau Docker partagé, utilisez le nom du conteneur (http://jellyfin:8096) ; sinon l'adresse IP du serveur.",
       "timeout": "Pas de réponse en 6 secondes.",
       "other": "Échec ({detail})."
     },
@@ -3393,7 +3394,8 @@
     "source": {
       "app": "Réglé ici",
       "env": "Depuis le .env",
-      "default": "Valeur par défaut"
+      "default": "Valeur par défaut",
+      "unset": "Non renseigné"
     },
     "envOverride": "Cette valeur remplace celle de votre .env : c'est elle qui est utilisée.",
     "resetEnv": "Revenir à la valeur du .env",

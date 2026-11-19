@@ -127,6 +127,19 @@ export async function testService(group: TestableGroup, valueOf: (key: string) =
       }
     }
   } catch (error) {
-    return failure(error);
+    const result = failure(error);
+    // « localhost » est le conteneur Laterna lui-même (19/11/2026, installation à blanc) : l'erreur la plus
+    // probable d'un premier essai, et « Injoignable » seul ne le rappelait pas au moment de l'échec.
+    return SETTINGS_BY_KEY.has(urlKey) && isLoopbackUrl(valueOf(urlKey)) ? { ok: false, detail: "localhost" } : result;
+  }
+}
+
+/** Une adresse qui désigne la machine elle-même — donc, vue du conteneur, le conteneur. */
+export function isLoopbackUrl(raw: string): boolean {
+  try {
+    const host = new URL(raw.trim()).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    return host === "localhost" || host === "::1" || host.endsWith(".localhost") || /^127\./.test(host) || host === "0.0.0.0";
+  } catch {
+    return false;
   }
 }

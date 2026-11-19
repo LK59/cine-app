@@ -17,7 +17,9 @@ const HELLO: Record<Locale, string> = { fr: "Bonjour", en: "Hello", es: "Hola", 
 const WORD_MS = 1700;
 
 export function HelloIntro({ current, busy, onChoose }: { current: Locale; busy: Locale | null; onChoose: (locale: Locale) => void }) {
-  const [index, setIndex] = useState(0);
+  // Le premier mot dans la langue du navigateur (19/11/2026) : « Bonjour » d'abord pour tout le monde
+  // faisait croire à une installation en français.
+  const [index, setIndex] = useState(() => Math.max(0, LOCALES.indexOf(current)));
   useEffect(() => {
     const id = window.setInterval(() => setIndex((i) => (i + 1) % LOCALES.length), WORD_MS);
     return () => window.clearInterval(id);

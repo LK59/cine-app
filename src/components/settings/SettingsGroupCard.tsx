@@ -133,7 +133,7 @@ export function SettingsGroupCard({
                 <label htmlFor={`setting-${def.key}`} className="text-sm font-medium text-white">
                   {t(`setup.fields.${def.key}`)}
                 </label>
-                {view && <SourceBadge source={view.source} />}
+                {view && <SourceBadge source={view.source} empty={view.source === "default" && !view.value && !view.set} />}
               </div>
               {def.kind === "boolean" ? (
                 <BooleanChoice id={`setting-${def.key}`} value={value} onChange={(v) => onDraft(def.key, v)} />
@@ -242,10 +242,14 @@ function ChoiceOrText({ id, choices, value, onChange }: { id: string; choices: r
   );
 }
 
-function SourceBadge({ source }: { source: SettingView["source"] }) {
+/**
+ * D'où vient la valeur. Un champ vide sans valeur par défaut dit « Non renseigné » (19/11/2026, installation
+ * à blanc) : « Valeur par défaut » sur une clé d'API vide laissait croire qu'une valeur existait.
+ */
+function SourceBadge({ source, empty = false }: { source: SettingView["source"]; empty?: boolean }) {
   const t = useT();
   const tone = source === "app" ? "text-accent-400" : source === "env" ? "text-success" : "text-subtle";
-  return <span className={`text-[11px] font-medium ${tone}`}>{t(`setup.source.${source}`)}</span>;
+  return <span className={`text-[11px] font-medium ${tone}`}>{t(empty ? "setup.source.unset" : `setup.source.${source}`)}</span>;
 }
 
 function BooleanChoice({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
@@ -319,7 +323,7 @@ export function testFailureText(t: (key: string, vars?: Record<string, string>) 
   if (detail === "invalid-url") return t("setup.errors.invalid-url");
   // L'adresse diffère de celle enregistrée : la clé enregistrée n'y est pas envoyée (20/10/2026).
   if (detail === "secret-required") return t("setup.errors.secret-required");
-  return detail === "unauthorized" || detail === "unreachable" || detail === "timeout" ? t(`setup.testFail.${detail}`) : t("setup.testFail.other", { detail });
+  return detail === "unauthorized" || detail === "unreachable" || detail === "timeout" || detail === "localhost" ? t(`setup.testFail.${detail}`) : t("setup.testFail.other", { detail });
 }
 
 /** Ce que le test des acteurs à l'écran rapporte du service (§138, `testService.ts`). */

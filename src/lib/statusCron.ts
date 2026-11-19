@@ -60,6 +60,7 @@ export function getLastStatusSnapshot(): StatusSnapshot | null {
 const LAST_STATUS_KEY = Symbol.for("cine-app.statusLastLogged");
 type LastStatusHolder = { [LAST_STATUS_KEY]?: Map<string, string> };
 const STATUS_WORDS: Record<string, string> = { ok: "en ligne", degraded: "dégradé", down: "en panne" };
+const STARTUP_WORDS: Record<string, string> = { ok: "online", degraded: "degraded", down: "down" };
 
 export function noteServiceChanges(services: Record<string, { name?: string; status: string; error?: string | null; latencyMs?: number | null }>): void {
   const holder = globalThis as LastStatusHolder;
@@ -67,8 +68,10 @@ export function noteServiceChanges(services: Record<string, { name?: string; sta
   const last = (holder[LAST_STATUS_KEY] ??= new Map());
   const configured = Object.entries(services).filter(([, r]) => isConfiguredCheck(r as Parameters<typeof isConfiguredCheck>[0]));
   if (first) {
-    const notOk = configured.filter(([, r]) => r.status !== "ok").map(([key, r]) => `${r.name ?? key} ${STATUS_WORDS[r.status] ?? r.status}`);
-    taskLog("services", `${configured.length - notOk.length}/${configured.length} en ligne`, { hors: notOk });
+    // La ligne du démarrage, en anglais comme les autres (19/11/2026) ; les changements d'état qui suivent
+    // restent dans la langue des autres lignes de tâches.
+    const notOk = configured.filter(([, r]) => r.status !== "ok").map(([key, r]) => `${r.name ?? key} ${STARTUP_WORDS[r.status] ?? r.status}`);
+    taskLog("services", `${configured.length - notOk.length}/${configured.length} online`, { offline: notOk });
   }
   for (const [key, r] of configured) {
     const before = last.get(key);

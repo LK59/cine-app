@@ -1,13 +1,13 @@
 // Le point d'entrée de l'image : les contrôles qui refusent un démarrage d'abord, les fichiers
 // statiques des builds précédents ensuite (voir staticCarryover.mjs), le serveur de Next enfin.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { carryOverStatic } from "./staticCarryover.mjs";
 import { dataDirProblem, startupRefusal } from "./startupChecks.mjs";
-import { applyFirstRunSecrets } from "./firstRunSecrets.mjs";
+import { applyFirstRunSecrets, secretsFile } from "./firstRunSecrets.mjs";
 import { linkImageCache } from "./imageCache.mjs";
 import { FRAMING_ENV, installResponseFraming } from "./responseFraming.mjs";
 import { installSalonsRelay } from "./salonsRelay.mjs";
@@ -23,17 +23,21 @@ const dataDir = process.env.DATA_DIR || path.join(appDir, "data");
 // Le dossier de données d'abord : les secrets générés au premier lancement y vivent.
 const dataProblem = dataDirProblem(dataDir);
 if (dataProblem) {
-  console.error(`[démarrage] refusé : ${dataProblem}`);
+  console.error(`[startup] refused: ${dataProblem}`);
   process.exit(1);
 }
 
 // Les secrets que l'environnement ne donne pas : générés une fois, gardés dans data/config
 // (DECISIONS.md §48). Ceux de `.env` ne sont jamais touchés.
 try {
-  const generated = await applyFirstRunSecrets(dataDir);
-  if (generated.length) console.log(`[démarrage] secrets lus dans data/config/secrets.json : ${generated.join(", ")}`);
+  // Lignes du démarrage en anglais (19/11/2026) : c'est ce qu'un nouvel administrateur lit en cherchant son
+  // code d'installation, et la documentation est en anglais. « generated » au premier lancement, « read »
+  // ensuite — la ligne disait « lus » sur un volume neuf.
+  const firstRun = !existsSync(secretsFile(dataDir));
+  const applied = await applyFirstRunSecrets(dataDir);
+  if (applied.length) console.log(`[startup] secrets ${firstRun ? "generated in" : "read from"} data/config/secrets.json: ${applied.join(", ")}`);
 } catch (error) {
-  console.error(`[démarrage] secrets du premier lancement indisponibles : ${error instanceof Error ? error.message : error}`);
+  console.error(`[startup] first-run secrets unavailable: ${error instanceof Error ? error.message : error}`);
 }
 
 const refusal = startupRefusal({
@@ -41,7 +45,7 @@ const refusal = startupRefusal({
   adminPassword: process.env.APP_ADMIN_PASSWORD ?? "",
 });
 if (refusal) {
-  console.error(`[démarrage] refusé : ${refusal}`);
+  console.error(`[startup] refused: ${refusal}`);
   process.exit(1);
 }
 
@@ -49,9 +53,9 @@ if (refusal) {
 // affiches réencodées : jamais un démarrage.
 try {
   const imageCache = linkImageCache({ appDir, dataDir });
-  if (imageCache !== "déjà lié") console.log(`[démarrage] cache des affiches : ${imageCache === "monté" ? "dossier monté, gardé tel quel" : "lié à data/image-cache"}`);
+  if (imageCache !== "déjà lié") console.log(`[startup] poster cache: ${imageCache === "monté" ? "mounted folder, kept as is" : "linked to data/image-cache"}`);
 } catch (error) {
-  console.error(`[démarrage] cache des affiches hors du volume : ${error instanceof Error ? error.message : error}`);
+  console.error(`[startup] poster cache outside the data volume: ${error instanceof Error ? error.message : error}`);
 }
 
 // La version de package.json (que la sortie `standalone` de Next copie à la racine de l'image),
@@ -69,11 +73,11 @@ try {
 try {
   const { buildId, carried, removed } = carryOverStatic({ appDir, dataDir });
   console.log(
-    `[démarrage] version ${version}, build ${buildId} — builds précédents gardés : ${carried.join(", ") || "aucun"}` +
-      (removed.length ? ` ; effacés : ${removed.join(", ")}` : "")
+    `[startup] version ${version}, build ${buildId} — previous builds kept: ${carried.join(", ") || "none"}` +
+      (removed.length ? `; removed: ${removed.join(", ")}` : "")
   );
 } catch (error) {
-  console.error(`[démarrage] fichiers des builds précédents non repris : ${error instanceof Error ? error.message : error}`);
+  console.error(`[startup] previous builds' files not carried over: ${error instanceof Error ? error.message : error}`);
 }
 
 /**
