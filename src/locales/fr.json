@@ -22,7 +22,7 @@
       "unknown": "Une erreur est survenue",
       "rateLimited": "Trop de tentatives. Réessayez dans {n} min."
     },
-    "tagline": "Vos films et vos séries, prêts à regarder.",
+    "tagline": "Votre serveur Jellyfin, en salle de cinéma.",
     "hint": "Utilisez les identifiants de votre compte Jellyfin.",
     "statusLink": "État des services",
     "showPassword": "Afficher le mot de passe",

@@ -4,8 +4,9 @@
 
 # Laterna
 
-**A self-hosted cinema for the whole household, built on Jellyfin.**<br>
-Rows of posters to watch from, a player that reads your files as they are, and a console to run the
+**Your Jellyfin server, as a cinema.**<br>
+A self-hosted cinema for the whole household:
+rows of posters to watch from, a player that reads your files as they are, and a console to run the
 server — in one container.
 
 [![License: AGPL-3.0](https://img.shields.io/github/license/LK59/laterna?color=blue)](LICENSE)

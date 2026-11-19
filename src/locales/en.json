@@ -22,7 +22,7 @@
       "unknown": "Something went wrong",
       "rateLimited": "Too many attempts. Try again in {n} min."
     },
-    "tagline": "Your films and series, ready to watch.",
+    "tagline": "Your Jellyfin server, as a cinema.",
     "hint": "Sign in with your Jellyfin account details.",
     "statusLink": "Service status",
     "showPassword": "Show password",

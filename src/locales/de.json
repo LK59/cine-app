@@ -22,7 +22,7 @@
       "unknown": "Ein Fehler ist aufgetreten",
       "rateLimited": "Zu viele Versuche. Versuch es in {n} Min. erneut."
     },
-    "tagline": "Ihre Filme und Serien, startklar.",
+    "tagline": "Ihr Jellyfin-Server als Kinosaal.",
     "hint": "Melden Sie sich mit Ihrem Jellyfin-Konto an.",
     "statusLink": "Dienststatus",
     "showPassword": "Passwort anzeigen",
