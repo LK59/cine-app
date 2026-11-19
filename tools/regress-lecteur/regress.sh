@@ -137,7 +137,7 @@ play() {
     -v "$WORK/pw/node_modules:/w/node_modules:ro" \
     -v "$HERE:/tool:ro" -v "$CREDS:/creds.txt:ro" -v "$data/logs:/logs:ro" -v "$out:/out" \
     -e BASE="http://localhost:$PORT" -e PROFILES="${REGRESS_PROFILES:-chromium firefox webkit iphone}" \
-    -e TITLES="/tool/${REGRESS_TITLES:-titres.json}" -e ONLY="${REGRESS_ONLY:-}" -e PLAN="${REGRESS_PLAN:-}" \
+    -e TITLES="/tool/${REGRESS_TITLES:-titres.json}" -e ONLY="${REGRESS_ONLY:-}" -e PLAN="${REGRESS_PLAN:-}" -e ENDURANCE_MIN="${REGRESS_ENDURANCE_MIN:-}" \
     -w /w "$PW_IMAGE" sh -c "cp /tool/scenario.mjs /w/ && node /w/scenario.mjs"
   python3 -I "$HERE/normalise.py" "$out"
 }

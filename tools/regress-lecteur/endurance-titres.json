@@ -1,0 +1,4 @@
+[
+  { "key": "blanche-neige", "kind": "movie", "title": "Blanche comme neige", "year": 2019, "why": "endurance : DTS 5.1 seul, décodé puis ré-encodé sur tous les moteurs" },
+  { "key": "the-knick", "kind": "series", "title": "The Knick", "year": 2014, "why": "endurance : épisodes DTS 5.1, enchaînés" }
+]

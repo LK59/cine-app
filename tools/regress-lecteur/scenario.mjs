@@ -28,6 +28,14 @@ const ONLY = (process.env.ONLY || "").split(",").filter(Boolean);
 // lui apprend quelque chose (27/10/2026).
 const PLAN = (process.env.PLAN || "").split(",").filter(Boolean);
 const inPlan = (profile, key) => (PLAN.length ? PLAN.includes(`${profile}/${key}`) : !ONLY.length || ONLY.includes(key));
+/**
+ * Le mode endurance (19/11/2026, « Son par Lumen » §197) : au lieu du parcours court, `ENDURANCE_MIN`
+ * minutes de film — un saut toutes les 2 min (avant, arrière, −10 s, loin), 3 min d'arrière-plan toutes
+ * les 10 min, et pour une série l'épisode suivant enchaîné au milieu. Ce qu'on cherche n'est pas une
+ * comparaison mais une dérive : attentes, reconstructions, replis, décodeurs restés ouverts (`lumenDec`
+ * sur `stop`), horloge du son (`audioSync`), mémoire de la page (Chromium) relevée toutes les 30 s.
+ */
+const ENDURANCE_MIN = Number(process.env.ENDURANCE_MIN || 0);
 const LOGS = "/logs";
 const OUT = "/out";
 
@@ -634,6 +642,120 @@ async function playCase(browser, def, state, profile, title) {
   }
 }
 
+/** Ouvre le titre et attend la première image — l'ouverture du parcours court, pour l'endurance. */
+async function openTitle(page, profile, title) {
+  let startupSent = false;
+  page.on("request", (r) => {
+    if (r.url().includes("/api/startup-timing")) startupSent = true;
+  });
+  await page.goto(`${BASE}/${title.hash}`, { waitUntil: "load" });
+  const startupUntil = Date.now() + 20000;
+  while (!startupSent && Date.now() < startupUntil) await sleep(POLL);
+  let found = null;
+  const openUntil = Date.now() + 30000;
+  while (!found && Date.now() < openUntil) {
+    found = await findPlayButton(page);
+    if (!found) await sleep(200);
+  }
+  if (!found) return null;
+  await press(page, profile, found.button);
+  return (await waitPlaying(page, 90000)) ? found.how : null;
+}
+
+async function enduranceCase(browser, def, state, profile, title) {
+  const cx = caseCtx.getStore();
+  const steps = [];
+  const samples = [];
+  const t0 = cx.t0;
+  const step = (name, outcome, extra) => {
+    steps.push({ step: name, outcome, atS: Math.round((Date.now() - t0) / 1000), ...(extra || {}) });
+    mark(name);
+    console.log(`  ${Math.round((Date.now() - t0) / 1000)} s ${name}: ${outcome}`);
+  };
+  const ctx = await browser.newContext({ ...def.ctx, storageState: state, locale: "fr-FR", timezoneId: "Europe/Paris" });
+  await ctx.addInitScript(() => {
+    try {
+      sessionStorage.setItem("cine:onboarding-skipped", String(Date.now()));
+    } catch {}
+  });
+  const page = await ctx.newPage();
+  cx.agent = await page.evaluate(() => navigator.userAgent).catch(() => null);
+  const consoleErrors = [];
+  page.on("pageerror", (e) => consoleErrors.push(String(e.message).split("\n")[0].slice(0, 200)));
+  const done = (how) => ({ steps, samples, timings: cx.timings, consoleErrors, how, forcedClicks: cx.forcedClicks, ms: Date.now() - t0 });
+  try {
+    const how = await openTitle(page, profile, title);
+    step("ouvrir", how ? "fait" : "échec");
+    if (!how) return done(null);
+    const end = t0 + ENDURANCE_MIN * 60_000;
+    // Les sauts, en boucle : de quoi ouvrir et fermer des décodeurs dans le worker toutes les 2 min.
+    const moves = [
+      ["saut +10 s", async () => page.keyboard.press("ArrowRight")],
+      ["saut −10 s", async () => page.keyboard.press("ArrowLeft")],
+      ["saut loin", async () => seekBar(page, profile, 0.15 + Math.random() * 0.6)],
+      ["saut −10 s ×3", async () => {
+        for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowLeft");
+      }],
+    ];
+    let nextMove = Date.now() + 120_000;
+    let nextBackground = Date.now() + 600_000;
+    let nextSample = Date.now();
+    let move = 0;
+    let nextEpisodeDone = title.kind !== "series";
+    while (Date.now() < end) {
+      if (Date.now() >= nextSample) {
+        const v = await video(page);
+        const mem = await page.evaluate(() => performance.memory?.usedJSHeapSize ?? null).catch(() => null);
+        samples.push({ atS: Math.round((Date.now() - t0) / 1000), t: v ? Math.round(v.t) : null, playing: !!v && !v.paused && v.rs >= 2, heapMB: mem ? Math.round(mem / 1e5) / 10 : null });
+        nextSample = Date.now() + 30_000;
+      }
+      if (!nextEpisodeDone && Date.now() - t0 > (ENDURANCE_MIN * 60_000) / 2) {
+        // L'épisode suivant, à mi-parcours : le bouton des commandes, comme un spectateur.
+        await showControls(page, profile);
+        const next = page.locator('[data-player-nav="next-episode"]');
+        if ((await next.count()) > 0 && (await next.first().isVisible())) {
+          await press(page, profile, next.first());
+          step("épisode suivant", (await waitPlaying(page, 90000)) ? "fait" : "délai dépassé");
+        } else step("épisode suivant", "absent");
+        nextEpisodeDone = true;
+      } else if (Date.now() >= nextBackground) {
+        await setHidden(page, true);
+        await sleep(180_000); // trois minutes d'arrière-plan : la durée est le geste
+        await setHidden(page, false);
+        let back = await waitPlaying(page, 30000);
+        if (!back) {
+          await page.keyboard.press("k");
+          back = await waitPlaying(page, 30000);
+        }
+        step("arrière-plan 3 min", back ? "fait" : "délai dépassé");
+        nextBackground = Date.now() + 600_000;
+      } else if (Date.now() >= nextMove) {
+        const [name, act] = moves[move++ % moves.length];
+        const before = await video(page);
+        await act();
+        const ok = name === "saut loin" ? true : await waitSeek(page, before?.t ?? 0, SEEK_CAP_MS);
+        step(name, ok ? "fait" : "délai dépassé");
+        nextMove = Date.now() + 120_000;
+      }
+      await sleep(1000);
+    }
+    await showControls(page, profile);
+    const close = page.locator('[data-player-nav="close"]');
+    if (await close.first().isVisible().catch(() => false)) {
+      const closeFrom = logSize("player.log");
+      await press(page, profile, close.first());
+      await waitLogLine(closeFrom, (l) => l.kind === "stop", 10000);
+      step("fermer", "fait");
+    } else step("fermer", "absent");
+    return done(how);
+  } catch (e) {
+    step("exception", String(e.message).split("\n")[0].slice(0, 160));
+    return done(null);
+  } finally {
+    await ctx.close().catch(() => {});
+  }
+}
+
 const results = [];
 
 async function runCase(browser, def, state, profile, version, title) {
@@ -645,7 +767,7 @@ async function runCase(browser, def, state, profile, version, title) {
     logFrom: { player: logSize("player.log"), server: logSize("server.log") },
   };
   return caseCtx.run(cx, async () => {
-    const r = await playCase(browser, def, state, profile, title);
+    const r = ENDURANCE_MIN > 0 ? await enduranceCase(browser, def, state, profile, title) : await playCase(browser, def, state, profile, title);
     // Ce que la fermeture de la page envoie encore (un `stop` de page fermée) : le journal au calme.
     await waitLogsQuiet(1000, 3000);
     const out = {
