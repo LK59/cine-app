@@ -60,15 +60,15 @@ export function trueHdThreadFacts(): Record<string, unknown> {
 }
 
 /**
- * « Son par Lumen » (essai demux-son, 19/11/2026) : `audioChain: "lumen"` quand l'essai est allumé
- * pour ce compte, et, si une piste décodée a pris ce chemin, `lumenDecoder` (« ffmpeg-7.1.5-eac3 »,
- * « flac », « navigateur »…) et le fil (`lumenThread`, `lumenWorkerError`). Rien quand il est coupé.
+ * « Son par Lumen » (§197, pour tous depuis 10.63.0) : `lumenDecoder` (« ffmpeg-7.1.5-eac3 », « flac »,
+ * « navigateur »…) et le fil (`lumenThread`, `lumenWorkerError`) quand une piste décodée a pris ce
+ * chemin — de quoi attribuer un repli au lecteur serveur. `audioChain: "mediabunny"` pour un
+ * administrateur qui l'a coupé pour comparer. Rien pour une piste copiée telle quelle.
  */
 export function lumenAudioFacts(): Record<string, unknown> {
-  if (!lumenAudioOn()) return {};
   const facts = takeLumenFacts();
+  if (!lumenAudioOn()) return { audioChain: "mediabunny" };
   return {
-    audioChain: "lumen",
     ...(facts ? { lumenDecoder: facts.decoder } : {}),
     ...(facts?.thread ? { lumenThread: facts.thread } : {}),
     ...(facts?.workerRefusal !== undefined ? { lumenWorkerError: facts.workerRefusal } : {}),

@@ -9,7 +9,10 @@ vi.mock("@mediabunny/ac3", () => (imported.push("ac3"), {}));
 vi.mock("@mediabunny/dts", () => (imported.push("dts"), {}));
 vi.mock("@/lib/webcodecs/flacDecoder", () => (imported.push("flacDecoder"), {}));
 vi.mock("@wasm-audio-decoders/flac", () => (imported.push("libflac"), {}));
-vi.mock("@/lib/webcodecs/truehd/truehdDecoder", () => ({ warmTrueHd: async () => void imported.push("truehd") }));
+vi.mock("@/lib/webcodecs/truehd/truehdDecoder", () => ({
+  warmTrueHd: async () => void imported.push("truehd"),
+  warmAc3Dts: async () => void imported.push("ac3dts"),
+}));
 
 beforeEach(() => {
   imported.length = 0;
@@ -27,6 +30,8 @@ const settle = async () => {
 };
 
 describe("scheduleDecoderWarmup", () => {
+  // « Son par Lumen » pour tous (§197, 10.63.0) : nos décodeurs AC-3/E-AC3/DTS et le TrueHD, libFLAC —
+  // et rien de mediabunny.
   it("fetches every decoder the player may need, FLAC included — after the delay and not before", async () => {
     vi.stubGlobal("navigator", {});
     const { scheduleDecoderWarmup } = await import("@/lib/webcodecs/decoderWarmup");
@@ -38,7 +43,22 @@ describe("scheduleDecoderWarmup", () => {
     await settle();
     // FLAC since 21/09/2026: shipped by a deploy that the onboarding screen — the only caller
     // until then — would have warmed for almost nobody.
-    expect(new Set(imported)).toEqual(new Set(["mediabunny", "ac3", "dts", "flacDecoder", "libflac", "truehd"]));
+    expect(new Set(imported)).toEqual(new Set(["libflac", "ac3dts", "truehd"]));
+  });
+
+  // Un administrateur qui a coupé « Son par Lumen » pour comparer : le préchauffage d'avant.
+  it("an account that turned Lumen off warms mediabunny's decoders, as before", async () => {
+    vi.stubGlobal("navigator", {});
+    vi.stubGlobal("window", { localStorage: { getItem: (k: string) => (k === "cine:lumen-audio" ? "off" : null) } });
+    const { scheduleDecoderWarmup } = await import("@/lib/webcodecs/decoderWarmup");
+    scheduleDecoderWarmup(8000);
+    await vi.advanceTimersByTimeAsync(8000);
+    await settle();
+    await settle();
+    // Les modules déjà chargés par le test précédent ne se recomptent pas : on vérifie ce qui
+    // distingue les deux chemins, mediabunny et ses extensions, et pas nos décodeurs AC-3/DTS.
+    expect(imported).toEqual(expect.arrayContaining(["mediabunny", "ac3", "dts", "flacDecoder", "truehd"]));
+    expect(imported).not.toContain("ac3dts");
   });
 
   it("stays quiet on a device asking to save data", async () => {

@@ -74,8 +74,8 @@ export function useAccountPreferencesLoader(): void {
   }, [onPublicPath, data, error, isValidating, mutate]);
 
   // « Son par Lumen » (lumenAudio.ts) : le lecteur le lit hors de React, sur le miroir de l'appareil.
-  // Recopié à chaque réponse ; absent de la réponse (compte ordinaire), l'essai est coupé.
+  // Recopié à chaque réponse ; absent de la réponse (compte qui n'est pas administrateur), allumé.
   useEffect(() => {
-    if (data && typeof data === "object") rememberLumenAudio((data as { lumenAudio?: boolean }).lumenAudio === true);
+    if (data && typeof data === "object") rememberLumenAudio((data as { lumenAudio?: boolean }).lumenAudio !== false);
   }, [data]);
 }

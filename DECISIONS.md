@@ -12434,5 +12434,15 @@ directement (`flacOpener`, l'en-tête de `flacHeader.ts`), l'Opus et l'AAC par l
 `isConfigSupported` (un AAC refusé repart vers le décodeur AAC en WebAssembly, comme avant), et le préchauffage
 télécharge nos modules au lieu des siens. `lumen-audio-sans-mediabunny.test.ts` échoue si un import revient.
 
-**À faire avant de l'allumer pour tous.** Séances réelles (iPhone, Opus d'animation, AAC refusé), lecture du journal ;
+**Allumé pour tous** (10.63.0, étape 2). Le défaut s'inverse : `lumen_audio` vaut « allumé » sans ligne en base,
+le miroir de l'appareil ne porte que « off », et seul un administrateur peut le couper pour comparer (son `start`
+dit alors `audioChain: "mediabunny"`). Le filet est celui de toujours : toute erreur du son mène au lecteur
+serveur (`fallToStable`), avec `lumenDecoder` sur la ligne `start` pour attribuer un repli à cette chaîne. Le
+préchauffage télécharge nos modules (AC-3/DTS, TrueHD, libFLAC) et plus ceux de mediabunny. Empreintes du lecteur :
+le seul champ `audioChain: "lumen"` dans l'option `probe`, prouvé ligne à ligne.
+
+**Retrait de mediabunny** : après quelques jours sans repli attribuable à cette chaîne ; il restera en dépendance de
+développement pour les bancs de comparaison, jusqu'à un banc de référence refait avec nos décodeurs.
+
+**Avant l'étape 2 (historique).** Séances réelles (iPhone, Opus d'animation, AAC refusé), lecture du journal ;
 ensuite, retirer mediabunny des dépendances (il ne resterait que le chemin coupé et les bancs de comparaison).

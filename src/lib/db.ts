@@ -1384,12 +1384,12 @@ export const userPrefsDb = {
     return row?.show_recap !== 0;
   },
 
-  /** « Son par Lumen » (essai demux-son) : coupé tant que le compte ne l'a pas allumé. */
+  /** « Son par Lumen » (§197) : allumé tant qu'un administrateur ne l'a pas coupé pour comparer. */
   getLumenAudio(userId: string): boolean {
     const row = getDb()
       .prepare("SELECT lumen_audio FROM user_preferences WHERE user_id = ?")
       .get(userId) as { lumen_audio: number | null } | undefined;
-    return row?.lumen_audio === 1;
+    return row?.lumen_audio !== 0;
   },
 
   setLumenAudio(userId: string, on: boolean): void {
