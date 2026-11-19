@@ -25,8 +25,6 @@ server — in one container.
 > at any time. Laterna never writes to your media files: it reads your library through Jellyfin, and
 > watched state and positions go back through Jellyfin's API like any other client.
 
-<img src="docs/screenshots/demo.webp" alt="The home screen, then playback with the cast on screen" width="100%">
-
 Laterna is the interface your household uses instead of Jellyfin's web client: a home screen of
 posters, one search for the library, TMDB and people, personal lists, requests for what is missing,
 and playback in the page. Its player engine, **Lumen**, reads the file exactly as it sits on disk,

@@ -1,7 +1,6 @@
 # Screenshots
 
-The images the top-level `README.md` shows — the home screen, the gallery and the animated excerpt
-(`demo.webp`) — live here. The full demo video is not stored in the repository.
+The images the top-level `README.md` shows — the home screen and the gallery — live here.
 
 They were captured from a real installation, in English, with a dedicated demo account and no personal
 data on screen: account names replaced by placeholders, no file or torrent names. Desktop shots at
