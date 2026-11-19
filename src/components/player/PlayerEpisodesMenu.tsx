@@ -1,5 +1,6 @@
 "use client";
 
+import { episodeNumberLabel, episodeTitles } from "@/lib/episodeDisplay";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import useSWR from "swr";
 import { Check } from "lucide-react";
@@ -144,7 +145,7 @@ export function PlayerEpisodesMenu({
             </span>
             <span className="min-w-0 flex-1">
               <span className="line-clamp-2 leading-snug">
-                {ep.episodeNumber}. {ep.title}
+                {episodeNumberLabel(ep)}. {episodeTitles(ep).join(" · ")}
               </span>
               <span className="block text-xs font-normal text-subtle">
                 {current

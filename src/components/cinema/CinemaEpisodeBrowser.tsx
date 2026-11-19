@@ -1,5 +1,6 @@
 "use client";
 
+import { episodeNumberLabel, episodeTitles } from "@/lib/episodeDisplay";
 import { missingCount, openingSeason, orderSeasons, seasonName } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -347,7 +348,21 @@ export function CinemaEpisodeBrowser({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
                     <span className="text-sm font-medium text-white">
-                      {ep.episodeNumber}. {ep.title}
+                      {ep.episodeNumberEnd ? (
+                        // Un fichier qui contient plusieurs épisodes : « 1–4. », puis un titre par ligne.
+                        <>
+                          {episodeNumberLabel(ep)}.{" "}
+                          {episodeTitles(ep).map((part, i) => (
+                            <span key={i} className={i > 0 ? "block" : undefined}>
+                              {part}
+                            </span>
+                          ))}
+                        </>
+                      ) : (
+                        <>
+                          {ep.episodeNumber}. {ep.title}
+                        </>
+                      )}
                     </span>
                     {row.isNext && (
                       <span className="shrink-0 rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-400 ring-1 ring-accent-500/40">

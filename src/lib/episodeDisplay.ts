@@ -55,7 +55,22 @@ export interface ArrangedEpisode {
   item: JellyfinItem;
   seasonNumber: number;
   episodeNumber: number;
+  /** Fichier multi-épisodes (« S01E01-E04 ») : le dernier épisode qu'il contient. */
+  episodeNumberEnd?: number;
   title: string;
+}
+
+/**
+ * Le numéro affiché d'un épisode : « 3 », ou « 1–4 » pour un fichier qui en contient plusieurs
+ * (19/11/2026) — une série rangée en compilations se lisait « 1, 5, 9… », comme s'il en manquait.
+ */
+export function episodeNumberLabel(ep: { episodeNumber: number; episodeNumberEnd?: number | null }): string {
+  return ep.episodeNumberEnd && ep.episodeNumberEnd > ep.episodeNumber ? `${ep.episodeNumber}–${ep.episodeNumberEnd}` : String(ep.episodeNumber);
+}
+
+/** Les titres d'un fichier multi-épisodes, que Jellyfin joint par « / » : un par ligne à l'écran. */
+export function episodeTitles(ep: { title: string; episodeNumberEnd?: number | null }): string[] {
+  return ep.episodeNumberEnd ? ep.title.split(" / ").map((t) => t.trim()).filter(Boolean) : [ep.title];
 }
 
 /**
@@ -84,6 +99,7 @@ export function arrangeEpisodes(items: readonly JellyfinItem[], seriesName: stri
   return arranged.map((a) => {
     const episodeNumber = a.episodeNumber!;
     const title = isMeaninglessTitle(a.item.Name, a.item.Path, seriesName) ? placeholderEpisodeTitle(episodeNumber, locale) : a.item.Name;
-    return { item: a.item, seasonNumber: a.seasonNumber, episodeNumber, title };
+    const end = a.item.IndexNumberEnd;
+    return { item: a.item, seasonNumber: a.seasonNumber, episodeNumber, ...(end && end > episodeNumber ? { episodeNumberEnd: end } : {}), title };
   });
 }

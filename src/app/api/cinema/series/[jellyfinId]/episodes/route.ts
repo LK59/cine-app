@@ -17,6 +17,8 @@ export interface CinemaEpisode {
   jellyfinItemId: string;
   seasonNumber: number;
   episodeNumber: number;
+  /** Fichier multi-épisodes : le dernier qu'il contient (`episodeNumberLabel` affiche « 1–4 »). */
+  episodeNumberEnd?: number;
   title: string;
   overview: string | null;
   thumbnailUrl: string | null;
@@ -62,6 +64,7 @@ function toCinemaEpisode(arranged: ArrangedEpisode): CinemaEpisode & { path: str
     // (`arrangeEpisodes`, DECISIONS.md §89).
     seasonNumber: arranged.seasonNumber,
     episodeNumber: arranged.episodeNumber,
+    ...(arranged.episodeNumberEnd ? { episodeNumberEnd: arranged.episodeNumberEnd } : {}),
     title: arranged.title,
     overview: item.Overview ?? null,
     thumbnailUrl: item.ImageTags?.Primary ? `/api/jellyfin/image?itemId=${item.Id}&tag=${item.ImageTags.Primary}` : null,

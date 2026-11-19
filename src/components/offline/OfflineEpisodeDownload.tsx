@@ -1,5 +1,6 @@
 "use client";
 
+import { episodeNumberLabel, episodeTitles } from "@/lib/episodeDisplay";
 import { seasonName } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
@@ -131,7 +132,7 @@ function OfflineEpisodeButtonOn({
       {download ? (
         <DownloadStateButton
           download={download}
-          name={`${episode.episodeNumber}. ${episode.title}`}
+          name={`${episodeNumberLabel(episode)}. ${episodeTitles(episode).join(" · ")}`}
           poster={poster}
           onlineResumeTicks={episode.resumeTicks}
           size={size}

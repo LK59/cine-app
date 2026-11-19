@@ -72,6 +72,8 @@ export interface JellyfinItem {
   SeriesName?: string;
   SeriesId?: string;
   IndexNumber?: number;
+  /** Le dernier épisode d'un fichier qui en contient plusieurs (« S01E01-E04 ») : 4 ici, absent sinon. */
+  IndexNumberEnd?: number;
   ParentIndexNumber?: number;
   /**
    * Demandés par les listes d'administration depuis le 14/10/2026 (DECISIONS.md §89) : un titre que
