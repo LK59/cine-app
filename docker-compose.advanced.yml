@@ -10,8 +10,10 @@
 # opens on first launch unless .env already sets Jellyfin, TMDB and Radarr or Sonarr.
 #
 # Updating: docker compose pull && docker compose up -d
-# `latest` is the latest release. Pinning or rolling back: a release number (ghcr.io/lk59/cine-app:10.65.1);
+# `latest` is the latest release. Pinning or rolling back: a release number (ghcr.io/lk59/laterna:10.65.1);
 # following the code day to day: `edge`.
+# Installed before 10.65.2? Keep the service and container name `cine-app` (your proxy and commands use
+# it); only the image: line may change to ghcr.io/lk59/laterna:latest (same image).
 
 networks:
   media_net:
@@ -20,9 +22,9 @@ networks:
     # and the service network reference below.
 
 services:
-  cine-app:
-    image: ghcr.io/lk59/cine-app:latest
-    container_name: cine-app
+  laterna:
+    image: ghcr.io/lk59/laterna:latest
+    container_name: laterna
     env_file:
       - .env
     environment:

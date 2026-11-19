@@ -10,9 +10,9 @@ rows of posters to watch from, a player that reads your files as they are, and a
 server — in one container.
 
 [![License: AGPL-3.0](https://img.shields.io/github/license/LK59/laterna?color=blue)](LICENSE)
-[![Version](https://img.shields.io/github/package-json/v/LK59/laterna?label=version)](https://github.com/LK59/laterna/pkgs/container/cine-app)
+[![Version](https://img.shields.io/github/package-json/v/LK59/laterna?label=version)](https://github.com/LK59/laterna/pkgs/container/laterna)
 [![Build and publish](https://github.com/LK59/laterna/actions/workflows/docker.yml/badge.svg?branch=main)](https://github.com/LK59/laterna/actions/workflows/docker.yml)
-[![Image](https://img.shields.io/badge/image-ghcr.io%2Flk59%2Fcine--app-2496ED?logo=docker&logoColor=white)](https://github.com/LK59/laterna/pkgs/container/cine-app)
+[![Image](https://img.shields.io/badge/image-ghcr.io%2Flk59%2Flaterna-2496ED?logo=docker&logoColor=white)](https://github.com/LK59/laterna/pkgs/container/laterna)
 
 [Website](https://laterna.fr) · [Quick start](#install) · [Features](docs/FEATURES.md) · [Docs](#documentation)
 
@@ -141,15 +141,15 @@ installs end up using.
 ```yaml
 # Laterna — works as is. Every option: https://github.com/LK59/laterna/blob/main/DEPLOYMENT.md
 services:
-  cine-app:
-    image: ghcr.io/lk59/cine-app:latest
-    container_name: cine-app
+  laterna:
+    image: ghcr.io/lk59/laterna:latest
+    container_name: laterna
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"     # this server only; a reverse proxy serves the rest
     # networks: [proxy]           # the Docker network of your proxy (and Jellyfin): see the end
     volumes:
-      - cine-data:/app/data       # database, settings, generated secrets, logs
+      - laterna-data:/app/data    # database, settings, generated secrets, logs
       # - /path/to/media:/mnt/media/video:ro   # optional, read-only: storage statistics
     environment:
       - TZ=Etc/UTC                # your time zone, e.g. Europe/Paris
@@ -161,8 +161,8 @@ services:
       start_period: 60s
 
 volumes:
-  cine-data:
-    name: cine-app-data
+  laterna-data:
+    name: laterna-data
 
 # networks:
 #   proxy:
@@ -171,8 +171,15 @@ volumes:
 
 ```bash
 docker compose up -d
-docker compose logs cine-app | grep "setup code"
+docker compose logs laterna | grep "setup code"
 ```
+
+In Portainer or Dockge, read the setup code in the container's log view, or run
+`docker logs laterna 2>&1 | grep "setup code"`.
+
+> **Installed before 10.65.2?** Your names are `cine-app` and `cine-app-data`: keep them — renaming
+> the volume would start from an empty database. Only the `image:` line may change to
+> `ghcr.io/lk59/laterna:latest` (same image).
 
 > **Every deployment option** is in the **[deployment guide](DEPLOYMENT.md)**: reverse proxy
 > (Nginx Proxy Manager, Caddy, Traefik), data in a folder, media, `.env`, updates and backups — and
@@ -188,13 +195,13 @@ curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/LK59/laterna/
 docker compose up -d
 ```
 
-This fetches [`docker-compose.example.yml`](docker-compose.example.yml), the same file with a
-comment on every line.
+This fetches [`docker-compose.example.yml`](docker-compose.example.yml), the full version of
+this file, with a comment on every line.
 </details>
 
 Then open `http://localhost:3000` on the server (or through an SSH tunnel): the example publishes
 port 3000 on the server's loopback only. The setup assistant asks for the one-time setup code
-printed in `docker compose logs cine-app`, creates the administrator account, and asks for Jellyfin
+printed in `docker compose logs laterna`, creates the administrator account, and asks for Jellyfin
 and TMDB (and offers Radarr, Sonarr and the rest). You do not clone this repository, install Node or
 write an `.env`: secrets are generated on first launch, and everything else is set later in
 **Management → Configuration**. Updating is `docker compose pull && docker compose up -d`;
@@ -206,7 +213,8 @@ for that style of deployment.
 
 ### What you need
 
-- A Linux host with **Docker Engine and the Compose plugin**.
+- A Linux **x86-64 (amd64)** host with **Docker Engine and the Compose plugin** — there is no ARM
+  image (Raspberry Pi, Ampere) yet.
 - A running **Jellyfin** with an API key. Every viewer signs in with their own Jellyfin account, and
   Jellyfin administrators are Laterna administrators.
 - A free **TMDB** API key, for posters and synopses.

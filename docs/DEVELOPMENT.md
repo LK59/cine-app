@@ -86,10 +86,12 @@ Diagnose against the container rather than reasoning in the dark. It has every s
 key in its environment:
 
 ```sh
-docker exec cine-app node -e '...'
-docker exec cine-app tail -n 50 /app/data/logs/server.log   # server errors, with stack traces
-docker exec cine-app tail -n 50 /app/data/logs/player.log   # what each viewer's player reported
+docker exec laterna node -e '...'
+docker exec laterna tail -n 50 /app/data/logs/server.log   # server errors, with stack traces
+docker exec laterna tail -n 50 /app/data/logs/player.log   # what each viewer's player reported
 ```
+
+The container is `cine-app` on installations made before 10.65.2.
 
 Both are one JSON object per line, rotated at 5 MB, and live in the `data` volume — which matters,
 because `docker logs` dies with the container, and the container is recreated on every deploy.

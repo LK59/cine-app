@@ -45,7 +45,7 @@ body:
       label: Logs
       description: |
         For playback, the player reports what it did in `player.log`; for server errors, `server.log`. As an administrator: Management → Activity → Logs, or
-        `docker exec cine-app tail -n 50 /app/data/logs/player.log`. **Remove account names and titles you'd rather not share** before pasting.
+        `docker exec laterna tail -n 50 /app/data/logs/player.log` (`cine-app` on installations made before 10.65.2). **Remove account names and titles you'd rather not share** before pasting.
       render: text
   - type: textarea
     id: setup

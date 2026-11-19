@@ -13,8 +13,9 @@ One compose file, one container, then everything is set in the browser.
 [Appendix: the advanced deployment](#appendix-the-advanced-deployment) ·
 [Uninstalling](#uninstalling) · Every variable: [ENV.md](ENV.md)
 
-**What you need:** a Linux host with Docker Engine and the Compose plugin (`docker compose version`
-answers), a running Jellyfin and a free [TMDB](https://www.themoviedb.org/settings/api) API key.
+**What you need:** a Linux **x86-64 (amd64)** host with Docker Engine and the Compose plugin
+(`docker compose version` answers) — there is no ARM image (Raspberry Pi, Ampere) yet —, a running
+Jellyfin and a free [TMDB](https://www.themoviedb.org/settings/api) API key.
 Radarr and Sonarr are optional: without them the cinema shows everything Jellyfin has; with them you
 also get management (additions, downloads, requests, missing episodes, the library check). Jellyseerr
 adds requests, qBittorrent download progress, Bazarr subtitle search. You do not clone this
@@ -22,7 +23,7 @@ repository, install Node, or write an `.env` file.
 
 | | |
 |---|---|
-| **Image** | `ghcr.io/lk59/cine-app:latest`, public — the same image is also published as `ghcr.io/lk59/laterna`. `latest` and `stable` are the latest [release](https://github.com/LK59/laterna/releases); each release also has its number (`:10.65.1`, `:10.65`) to pin or roll back; `edge` follows the code day to day |
+| **Image** | `ghcr.io/lk59/laterna:latest`, public — the same image is also published under its former name, `ghcr.io/lk59/cine-app`. `latest` and `stable` are the latest [release](https://github.com/LK59/laterna/releases); each release also has its number (`:10.65.1`, `:10.65`) to pin or roll back; `edge` follows the code day to day |
 | **Architecture** | `linux/amd64` |
 | **Listens on** | port `3000` inside the container, plain HTTP |
 | **Runs as** | uid `1001`, gid `1001`, not root |
@@ -50,21 +51,23 @@ Create an empty folder, save this as `docker-compose.yml` inside it. It is
 #   2. docker compose up -d
 #   3. Open http://localhost:3000 on the server (or through an SSH tunnel) — the setup assistant
 #      asks for everything else, starting with the one-time setup code printed in
-#      `docker compose logs cine-app`.
+#      `docker compose logs laterna`.
 #
 # No .env is needed: secrets are generated on first launch, and every setting is made in the app.
 # Each optional line below is commented, with what it is for. Guide: DEPLOYMENT.md. Variables: ENV.md.
+# Installed before 10.65.2? Keep your names (cine-app, cine-app-data): a renamed volume starts from an
+# empty database. Only the image: line may change to ghcr.io/lk59/laterna:latest (same image).
 services:
-  cine-app:
-    image: ghcr.io/lk59/cine-app:latest   # the latest release; :10.65.1 to pin one, :edge to follow main
-    container_name: cine-app              # the name the commands in the guide use
+  laterna:
+    image: ghcr.io/lk59/laterna:latest    # the latest release; :10.65.1 to pin one, :edge to follow main
+    container_name: laterna               # the name the commands in the guide use
     restart: unless-stopped
 
     # Published on the server itself only (127.0.0.1): open http://localhost:3000 there, or from
     # another machine through an SSH tunnel (ssh -L 3000:localhost:3000 <server>). Change the first
     # 3000 if it is taken ("127.0.0.1:3005:3000").
     # To serve other machines, put a reverse proxy in front and set TRUSTED_PROXIES below: on the
-    # same Docker network, delete these two lines and point the proxy at http://cine-app:3000;
+    # same Docker network, delete these two lines and point the proxy at http://laterna:3000;
     # outside Docker, point it at 127.0.0.1:3000. Removing "127.0.0.1:" publishes the port on every
     # interface — your whole network, or the Internet if the host is exposed: only do it knowingly.
     ports:
@@ -77,13 +80,12 @@ services:
 
     volumes:
       # Everything the app keeps: database, settings, generated secrets, logs. The only state.
-      - cine-data:/app/data
+      - laterna-data:/app/data
       # Variant: a folder next to this file instead of a named volume (replace the line above).
       # Create it first, owned by the container's user: mkdir data && sudo chown 1001:1001 data
       # - ./data:/app/data
 
-      # Optional, read-only: your media, for Management → Statistics, the storage card and
-      # dialogue search (which reads the films' subtitles).
+      # Optional, read-only: your media, for Management → Statistics and the storage card only.
       # Mount the root Radarr and Sonarr see at /mnt/media/video; movies/, tv/ and downloads/seeds/
       # inside it are found on their own (other layouts: MEDIA_ROOT and *_PATH in ENV.md).
       # - /path/to/media:/mnt/media/video:ro
@@ -106,8 +108,8 @@ services:
       start_period: 60s
 
 volumes:
-  cine-data:
-    name: cine-app-data                   # a fixed name, used by the backup commands in the guide
+  laterna-data:
+    name: laterna-data                    # a fixed name, used by the backup commands in the guide
 
 # networks:
 #   proxy:
@@ -116,13 +118,18 @@ volumes:
 
 Or download it: `curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/LK59/laterna/main/docker-compose.example.yml`.
 
+> **Installed before 10.65.2?** Your names are `cine-app` and `cine-app-data`: keep them — renaming
+> the volume would start from an empty database. Only the `image:` line may change to
+> `ghcr.io/lk59/laterna:latest` (same image). In the commands of this guide, use `cine-app` where
+> they say `laterna`, and `cine-app-data` where they say `laterna-data`.
+
 **What to adjust, line by line:**
 
 | Line | When to change it |
 |---|---|
-| `ports` | Published on the server's loopback only (`127.0.0.1:3000`): `http://localhost:3000` on the server, through an SSH tunnel (`ssh -L 3000:localhost:3000 <server>`), or from a reverse proxy installed on the host. Delete it when a proxy on the same Docker network reaches `cine-app:3000`: nothing is then published on the host. Removing `127.0.0.1:` publishes the port on every interface — anyone who reaches the host reaches the app; do it only on a network you trust, and set `TRUSTED_PROXIES` for any proxy in front. |
+| `ports` | Published on the server's loopback only (`127.0.0.1:3000`): `http://localhost:3000` on the server, through an SSH tunnel (`ssh -L 3000:localhost:3000 <server>`), or from a reverse proxy installed on the host. Delete it when a proxy on the same Docker network reaches `laterna:3000`: nothing is then published on the host. Removing `127.0.0.1:` publishes the port on every interface — anyone who reaches the host reaches the app; do it only on a network you trust, and set `TRUSTED_PROXIES` for any proxy in front. |
 | `networks` | Uncomment it to join the network your reverse proxy uses. If Jellyfin, Radarr and Sonarr are on it too, Laterna reaches them by container name (`http://jellyfin:8096`). `docker network ls` lists the networks; replace `proxy` with the real name, in both places. |
-| `cine-data` | The named volume is ready to use: Docker creates it with the right owner. The bind-mount variant keeps the data in a visible `./data` folder; create it first and give it to uid `1001`, or the container cannot write and stops at once. |
+| `laterna-data` | The named volume is ready to use: Docker creates it with the right owner. The bind-mount variant keeps the data in a visible `./data` folder; create it first and give it to uid `1001`, or the container cannot write and stops at once. |
 | media mount | Only for Management → Statistics and the storage card. Mount the root Radarr and Sonarr use, read-only, at `/mnt/media/video`. Folders that are not world-readable need `user: "1001:<your gid>"`, see the [appendix](#file-permissions). |
 | `TZ` | Your [time zone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones), for log timestamps and scheduled tasks. Times shown in the app follow each viewer's device. |
 | `COOKIE_SECURE`, `TRUSTED_PROXIES` | Behind a reverse proxy, [step 3](#3-put-it-behind-a-reverse-proxy). |
@@ -131,7 +138,9 @@ Or download it: `curl -fsSL -o docker-compose.yml https://raw.githubusercontent.
 **Addresses are seen from inside the container.** When the assistant asks for Jellyfin's address,
 `localhost` means the Laterna container itself. Use the container name on a shared Docker network,
 otherwise the server's LAN address (`http://192.168.1.10:8096`). A public `https://` address works
-too, at the cost of a round trip through the proxy for every call.
+too, at the cost of a round trip through the proxy for every call. If Jellyfin runs in another
+compose project, attach both to the same external Docker network (a `networks:` block in each, as
+above), or use the server's LAN address if Jellyfin publishes port 8096 on it.
 
 ---
 
@@ -139,11 +148,11 @@ too, at the cost of a round trip through the proxy for every call.
 
 ```bash
 docker compose up -d
-docker compose logs -f cine-app      # Ctrl-C stops following; the container keeps running
+docker compose logs -f laterna       # Ctrl-C stops following; the container keeps running
 ```
 
-A good start prints a few `[démarrage]` lines (secrets generated into `data/config/secrets.json`,
-poster cache linked), the version, and `Ready`. About a minute later `docker compose ps` reads
+A good start prints a few start-up lines (secrets generated into `data/config/secrets.json`,
+poster cache linked), the version, and `Ready`. Within a minute `docker compose ps` reads
 `healthy`.
 
 Open `http://localhost:3000` (on the server, or through the SSH tunnel): every page leads to the
@@ -156,7 +165,8 @@ before it creates the administrator account:
 [setup] One-time setup code: ABCD-EFGH-JKLM — enter it in the setup assistant to create the administrator account (valid until that account exists).
 ```
 
-`docker compose logs cine-app | grep "setup code"` finds it again. It is printed at every start
+`docker compose logs laterna | grep "setup code"` finds it again (in Portainer or Dockge: the
+container's log view, or `docker logs laterna 2>&1 | grep "setup code"`). It is printed at every start
 until the administrator account exists, kept meanwhile in `data/config/setup-code` (readable by the
 container's user only), and deleted once the account is created. An installation that already has
 an administrator — created by the assistant, or `APP_ADMIN_PASSWORD` in `.env` — never gets one.
@@ -164,13 +174,13 @@ an administrator — created by the assistant, or `APP_ADMIN_PASSWORD` in `.env`
 > **Run the assistant straight away.** The setup code keeps a visitor who merely reaches the port
 > from creating the administrator account, but nothing else is protected until that account exists.
 
-If the container stops at once, the last log line says why, in French, on purpose:
+If the container stops at once, the last log line says why:
 
-| Message | Meaning |
+| The line names | Meaning |
 |---|---|
-| `DATA_DIR (/app/data) ne peut pas être écrit (EACCES)…` | The data folder (bind-mount variant) belongs to root. `sudo chown -R 1001:1001 data`, then `docker compose up -d`. |
-| `SESSION_SECRET est la valeur d'exemple publiée.` / `…fait N caractères — 16 au moins.` | A `SESSION_SECRET` was set to an example or too short a value. Remove it to have one generated, or see [ENV.md](ENV.md#never-in-the-app). |
-| `APP_ADMIN_PASSWORD est la valeur d'exemple publiée.` | An `APP_ADMIN_PASSWORD` was left at `change-me`. Remove it or choose a real one. |
+| `DATA_DIR (/app/data)` and `EACCES` | The data folder (bind-mount variant) belongs to root. `sudo chown -R 1001:1001 data`, then `docker compose up -d`. |
+| `SESSION_SECRET` | A `SESSION_SECRET` was set to the published example or to fewer than 16 characters. Remove it to have one generated, or see [ENV.md](ENV.md#never-in-the-app). |
+| `APP_ADMIN_PASSWORD` | An `APP_ADMIN_PASSWORD` was left at the published example (`change-me`). Remove it or choose a real one. |
 | `network … declared as external, but could not be found` | The network name in the compose file does not match `docker network ls`. |
 
 ---
@@ -183,7 +193,7 @@ front of it.
 
 Whatever the proxy:
 
-1. Forward your hostname to `cine-app:3000` (proxy on the same Docker network) or to
+1. Forward your hostname to `laterna:3000` (proxy on the same Docker network) or to
    `127.0.0.1:3000` (proxy installed on the host, `ports` kept).
 2. Add to the compose file, then `docker compose up -d`:
    ```yaml
@@ -206,7 +216,7 @@ be buffered; the app sends `X-Accel-Buffering: no`, which nginx honours. No WebS
 
 ### Nginx Proxy Manager
 
-*Hosts → Proxy Hosts → Add Proxy Host*: your domain, scheme `http`, forward hostname `cine-app`,
+*Hosts → Proxy Hosts → Add Proxy Host*: your domain, scheme `http`, forward hostname `laterna`,
 port `3000`. *SSL* tab: request a certificate, *Force SSL*, *HTTP/2*. *Advanced* tab:
 
 ```nginx
@@ -224,11 +234,11 @@ lines in its `server` block.
 ### Caddy
 
 ```caddyfile
-cine.example.com {
+laterna.example.com {
 	request_body {
 		max_size 110MB
 	}
-	reverse_proxy cine-app:3000
+	reverse_proxy laterna:3000
 }
 ```
 
@@ -242,10 +252,10 @@ Labels on the Laterna service, with Traefik on the same network:
 ```yaml
     labels:
       - traefik.enable=true
-      - traefik.http.routers.cineapp.rule=Host(`cine.example.com`)
-      - traefik.http.routers.cineapp.entrypoints=websecure
-      - traefik.http.routers.cineapp.tls.certresolver=letsencrypt   # your resolver's name
-      - traefik.http.services.cineapp.loadbalancer.server.port=3000
+      - traefik.http.routers.laterna.rule=Host(`laterna.example.com`)
+      - traefik.http.routers.laterna.entrypoints=websecure
+      - traefik.http.routers.laterna.tls.certresolver=letsencrypt   # your resolver's name
+      - traefik.http.services.laterna.loadbalancer.server.port=3000
 ```
 
 Traefik needs nothing else. Then `TRUSTED_PROXIES=traefik`.
@@ -266,13 +276,15 @@ the other one. A device that has notifications turned on at both addresses recei
 
 ## 4. The setup assistant, screen by screen
 
-Each screen saves what it holds when you press **Next**. You can leave and come back: the
-assistant reopens where you stopped, until you press **Finish**.
+The assistant opens on an unnumbered **Welcome** screen, then counts seven: *Step 1 of 7 · Account*
+to *Step 7 of 7 · Finish*. Choosing a language on the Welcome screen moves on at once; every other
+screen saves what it holds when you press **Next**. You can leave and come back: the assistant
+reopens where you stopped, until you press **Finish**.
 
 | Screen | What it asks |
 |---|---|
-| **Hello** | The language of the installation (French, English, Spanish, German). It becomes the language of the sign-in page and of every account that has not chosen one. Pick one, or press **Next** to keep the one shown. |
-| **1 · Account** | The local administrator account: the one-time setup code printed in the container logs (`docker logs cine-app`, see [step 2](#2-start-the-container)), then a username and a password of eight characters or more, stored hashed. It opens Management even when Jellyfin is down. If an account already exists (one from a previous visit, or one fixed in `.env`), the screen asks you to sign in with it instead. |
+| **Welcome** | The language of the installation (French, English, Spanish, German). It becomes the language of the sign-in page and of every account that has not chosen one. Touching a language saves it and moves on; **Next** keeps the one shown. |
+| **1 · Account** | The local administrator account: the one-time setup code printed in the container logs (`docker logs laterna`, see [step 2](#2-start-the-container)), then a username and a password of eight characters or more, stored hashed. It opens Management even when Jellyfin is down. If an account already exists (one from a previous visit, or one fixed in `.env`), the screen asks you to sign in with it instead. |
 | **2 · Jellyfin** | Its address and API key (*Jellyfin → Dashboard → API Keys → +*), and optionally the public address used by the *Open in Jellyfin* links. Below, one playback choice: hand files the browser cannot play over to Jellyfin, which converts them — on by default. |
 | **3 · TMDB** | The API key (*themoviedb.org → Settings → API*). |
 | **4 · Library** | Optional. Radarr and/or Sonarr: address and API key (*Settings → General → API Key*). **Next** does not need them: without them the cinema shows what Jellyfin has, and the management pages that depend on them say they are not configured. |
@@ -295,7 +307,7 @@ Connections**. The answers:
 | *No answer within 6 seconds.* | A firewall, or an address that leads nowhere. |
 
 <!-- CAPTURE : deploy-jellyfin-apikey.png
-     Jellyfin Dashboard → API Keys, with a key named "cine-app" in the list.
+     Jellyfin Dashboard → API Keys, with a key named "Laterna" in the list.
      Crop to the panel; blur or redact the key value itself.
      Then uncomment:
 <img src="docs/screenshots/deploy-jellyfin-apikey.png" width="70%">
@@ -318,7 +330,7 @@ administrators here; everyone else is a regular user.
 Management. Use your own Jellyfin account to watch. Lost its password?
 
 ```bash
-docker exec -it cine-app node server-boot/reset-admin-password.mjs
+docker exec -it laterna node server-boot/reset-admin-password.mjs
 ```
 
 It asks for the new password twice, without showing it. With Jellyseerr configured, a Jellyfin
@@ -487,7 +499,7 @@ Database migrations run at startup. Open tabs reload themselves to the new versi
 nothing is playing. `docker image prune` reclaims the old images.
 
 **Pin or roll back** by replacing `latest` with a release number:
-`image: ghcr.io/lk59/cine-app:10.65.1`, then `docker compose up -d`. To follow the code day to day
+`image: ghcr.io/lk59/laterna:10.65.1`, then `docker compose up -d`. To follow the code day to day
 instead of the releases, use `:edge` — it is what `main` builds, before it becomes a release.
 
 ### Backups
@@ -495,28 +507,31 @@ instead of the releases, use `:edge` — it is what `main` builds, before it bec
 Everything is in the data volume. The app also copies its database every night into `backups/`
 inside it (not `repliques.db`, the dialogue index, which is rebuilt from the films), keeping seven days — a guard against a damaged database file, not against losing the
 disk. Copy the volume elsewhere for that, with the container stopped so the copy is consistent
-(the image cache rebuilds itself, and `offline/` holds only copies the devices can ask for again —
-add `--exclude=./offline` to leave them out):
+(the image cache and `static-previous/`, the previous build's files, rebuild themselves; `offline/`
+holds only copies the devices can ask for again — add `--exclude=./offline` to leave them out):
 
 ```bash
 docker compose stop
-docker run --rm -v cine-app-data:/data -v "$PWD":/backup alpine \
-  tar czf /backup/cineapp-$(date +%F).tgz --exclude=./image-cache -C /data .
+docker run --rm -v laterna-data:/data -v "$PWD":/backup alpine \
+  tar czf /backup/laterna-$(date +%F).tgz --exclude=./image-cache --exclude=./static-previous -C /data .
 docker compose start
 ```
+
+Always copy the whole volume: `cine.db-wal` holds the most recent changes. The archive is created by
+root: `sudo chown $USER laterna-*.tgz` if needed.
 
 Restore:
 
 ```bash
 docker compose down
-docker run --rm -v cine-app-data:/data -v "$PWD":/backup alpine \
-  sh -c 'rm -rf /data/* && tar xzf /backup/cineapp-YYYY-MM-DD.tgz -C /data'
+docker run --rm -v laterna-data:/data -v "$PWD":/backup alpine \
+  sh -c 'rm -rf /data/* && tar xzf /backup/laterna-YYYY-MM-DD.tgz -C /data'
 docker compose up -d
 ```
 
-With the bind-mount variant, copy the `data` folder instead (`tar czf cineapp-$(date +%F).tgz
---exclude=data/image-cache data docker-compose.yml`), and after a restore check its owner:
-`sudo chown -R 1001:1001 data`.
+With the bind-mount variant, copy the `data` folder instead (`tar czf laterna-$(date +%F).tgz
+--exclude=data/image-cache --exclude=data/static-previous data docker-compose.yml`), and after a
+restore check its owner: `sudo chown -R 1001:1001 data`.
 
 **Keep `data/config/secrets.json`.** It holds the session secret and the push keys: without it,
 everyone is signed out and notifications must be turned on again on every device.
@@ -552,9 +567,11 @@ writes its own into the volume, one JSON object per line, rotated at 5 MB. Accou
 → Account activity reads them too.
 
 ```bash
-docker exec cine-app tail -n 50 /app/data/logs/server.log   # server and browser errors, with stack traces
-docker exec cine-app tail -n 50 /app/data/logs/player.log   # what each viewer's player reported
+docker exec laterna tail -n 50 /app/data/logs/server.log   # server and browser errors, with stack traces
+docker exec laterna tail -n 50 /app/data/logs/player.log   # what each viewer's player reported
 ```
+
+(`cine-app` instead of `laterna` on installations made before 10.65.2.)
 
 The others: `auth.log` (sign-ins), `startup.log` (each opening of the cinema), `notifications.log`,
 `subtitle-gen.log`, `recherche.log` (one line per description search, « Previously », question and « So far »,
@@ -564,7 +581,7 @@ never their text), `bench.log` and `bench-player.log` (the test bench).
 |---|---|
 | The container stops at once | [Step 2](#2-start-the-container): the last log line names the cause. |
 | Every page leads to `/setup` | The assistant is not finished: open it and press **Finish**. |
-| The assistant refuses the setup code | Copy it again from the container logs (`docker compose logs cine-app`, the line starting `[setup] One-time setup code:`); case, spaces and dashes do not matter. Deleting `data/config/setup-code` and restarting prints a new one. |
+| The assistant refuses the setup code | Copy it again from the container logs (`docker compose logs laterna`, the line starting `[setup] One-time setup code:`); case, spaces and dashes do not matter. Deleting `data/config/setup-code` and restarting prints a new one. |
 | No Jellyfin account can sign in | Jellyfin's address, seen from the container: *Test connection* in Management → Configuration → Connections, or the shell check below. The local administrator account does not depend on Jellyfin and tells which half is broken. |
 | Sign-in works over `http://` but not behind the proxy, or the reverse | `COOKIE_SECURE`: `true` only when served over HTTPS. |
 | A page change fails, a reload of the same page works | The nginx header buffer, [step 3](#nginx-proxy-manager). |
@@ -581,7 +598,7 @@ never their text), `bench.log` and `bench-player.log` (the test bench).
 **Test from inside the container** — the only point of view that counts for addresses:
 
 ```bash
-docker exec cine-app wget -qO- http://jellyfin:8096/System/Info/Public
+docker exec laterna wget -qO- http://jellyfin:8096/System/Info/Public
 ```
 
 A JSON answer means the address is right; a timeout or `bad address` means a network problem, not
@@ -638,9 +655,12 @@ When qBittorrent shares a VPN container's network, its address is the VPN contai
 
 ```bash
 docker compose down
-docker volume rm cine-app-data        # deletes every setting, list and log
-docker image rm ghcr.io/lk59/cine-app:latest
+docker volume rm laterna-data         # deletes every setting, list and log
+docker image rm ghcr.io/lk59/laterna:latest
 ```
+
+On an installation made before 10.65.2, the volume is `cine-app-data`, and the image may still be
+`ghcr.io/lk59/cine-app:latest`.
 
 Nothing was written outside the volume and this folder, and nothing was changed in Radarr, Sonarr
 or Jellyfin beyond the API key you created and the devices Laterna sign-ins register in Jellyfin —
