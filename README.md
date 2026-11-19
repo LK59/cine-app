@@ -48,8 +48,9 @@ design.
   can be switched off.
 - **One container for the cinema and the console.** Everyone signs in at `/`; the administrator also
   gets `/gestion` — downloads, service status, storage, Radarr and Sonarr libraries, calendar,
-  statistics, and every setting made in the browser. One Docker container, one volume, no `.env`
-  required.
+  statistics, and every setting made in the browser — plus an
+  [Activity panel](docs/FEATURES.md#activity--what-went-wrong-and-where) that says why a film stopped
+  and whether the file or the device is to blame. One Docker container, one volume, no `.env` required.
 - **An app on the phone, offline included.** Laterna installs to the home screen on iPhone, iPad and
   Android, with notifications (Apple Web Push included). A film, an episode or a whole season can be
   downloaded to watch without a network; positions reach Jellyfin when the network comes back.

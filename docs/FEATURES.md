@@ -334,8 +334,37 @@ list* are Cinema's:
 - **Service status** — one line per service, its version and figures, or its error
 - **Storage** — movies / series / seeds / other on the media disk
 - **Cinema activity** — active accounts, sessions playing now, reports waiting for an answer and
-  the week's errors, opening Cinema's *Activity* panel
+  the week's errors, opening Cinema's *Activity* panel ([below](#activity--what-went-wrong-and-where))
 - **Latest imports** — what Radarr and Sonarr grabbed and imported, and recent requests
+
+### Activity — what went wrong, and where
+
+Every player reports what it did — the path it took, its waits, seeks, recoveries and errors — and
+the **Activity** panel (Cinema → *Account* → *Activity*, administrators only) turns that into
+answers. It exists to diagnose playback: « why did this film stop on that phone? » is answered here,
+not by asking the person who was watching. Nothing leaves the server; it reads the logs in `data/logs/`.
+
+- **Live** — who is watching or browsing, the title, the device, and the path: Lumen in the browser,
+  Jellyfin's server player, or another Jellyfin client.
+- **A period at a glance** (24 h, 7 days, 30 days, all) — sessions, time watched, the share of
+  sessions without any trouble, start-up time (from the device's cache or the network), waits and
+  how many were watched to the end, each with its change from the previous period.
+- **Needs attention** — only what actually got in someone's way. What the player handled on its own
+  — a recovered rebuild, a slow connection, an expected handover to the server player, a return from
+  the background — is counted apart, never raised as an alert.
+- **The file or the device?** — for each title that failed, whether it fails for everyone (the
+  file), for one kind of device, or on a single device.
+- **Playback quality per device** — opening time, waits, slow seeks, rebuilds and fallbacks.
+- **A session in detail** — its timeline: playing, seeking, waiting, in the background, and each
+  incident at the moment it happened.
+- **Habits** — what is watched to the end or left within ten minutes, series in progress, hours
+  watched over a month, the time of day, how many requested titles were actually watched.
+- **Everything else** — sign-ins and devices, notifications sent, problem reports, offline downloads,
+  share links, book reading, and every log file, readable in place.
+
+<img src="screenshots/activity-kpis.webp" alt="Activity: sessions, time watched, trouble-free share, start-up time, waits, watched to the end" width="100%">
+
+<img src="screenshots/activity-charts.webp" alt="Activity: hours watched over thirty days and the time of day" width="100%">
 
 ### Library and media management
 
