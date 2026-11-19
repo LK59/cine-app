@@ -276,7 +276,7 @@ of the player, in French: [PRESENTATION-LECTEUR.md](PRESENTATION-LECTEUR.md).
 
 ## Downloads for offline viewing
 
-*Beta.* A film, an episode or a whole season can be downloaded from its page to watch without a
+A film, an episode or a whole season can be downloaded from its page to watch without a
 network, or on a link too weak for streaming. Laterna does not copy the original file: Jellyfin
 prepares a lighter version through its transcoding API — *Standard* (720p, about 2 Mbit/s) or
 *High* (1080p, about 4 Mbit/s), with the one audio track chosen at download — and the device keeps

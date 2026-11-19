@@ -162,7 +162,7 @@ provider, key and monthly ceiling. Their sources are built on the server from wh
 watched only (`src/lib/ask/`, `src/lib/recap/`), and every answer passes the same name check before it
 is shown.
 
-**Offline downloads** ([DECISIONS §109](DECISIONS.md), `src/lib/offline/`, beta) do not read media
+**Offline downloads** ([DECISIONS §109](DECISIONS.md), `src/lib/offline/`) do not read media
 files: Jellyfin transcodes a lighter version through its API (`/Videos/{id}/stream.mp4`, fragmented
 MP4), the server writes it to `data/offline/` as it arrives (`offline_jobs` / `offline_requests`), and
 the device fetches it by ranges into OPFS (`cine-offline/<account>/<id>/`) and plays it with a player
@@ -1035,9 +1035,10 @@ identical, and every sample's presentation time, size, file offset and sync flag
   track, a JPEG/PNG sample entry), a chapter text track (`tref/chap`, QuickTime `text`), a data or
   timecode track become `other` and are never read.
 - **Timestamps** per track timescale: decode times from `stts`, composition offsets from `ctts`
-  (signed in both versions), and the edit list applied as ffmpeg and mediabunny apply it — empty
+  (signed in both versions), and the edit list applied as ffmpeg applies it — empty
   edits shift the start, the first media edit's `media_time` is subtracted. Presentation times
-  therefore match what ffprobe reports, and the audio mediabunny decodes for re-encoding lands on
+  therefore match what ffprobe reports, and the audio decoded for re-encoding (read by this same
+  demuxer since §197) lands on
   the same instants as the samples copied beside it (verified to the microsecond on library files).
   Only the first media edit is followed; a longer list is traced.
 - **The sample index** (`stsz`/`stz2`, `stco`/`co64`, `stsc`, `stss`, `stts`, `ctts`) is expanded into
@@ -1313,8 +1314,9 @@ pre-skip, 312 samples = 6.5 ms here) is not subtracted, and the browser discards
 
 ### Channel order: who converts, measured (2026-09-21)
 
-Every decoder here hands back the **standard (WAVE) order** — L R C LFE Ls Rs (Lrs Rrs): mediabunny's
-AC-3/E-AC3/DTS (measured against ffmpeg, 19/09), libFLAC (the format defines it), FFmpeg's TrueHD
+Every decoder here hands back the **standard (WAVE) order** — L R C LFE Ls Rs (Lrs Rrs): FFmpeg's
+AC-3/E-AC3/DTS (measured against ffmpeg on 19/09 through mediabunny's build, and identical to the sample
+with ours since 19/11 — §197), libFLAC (the format defines it), FFmpeg's TrueHD
 (layout masks 0x60f / 0x63f; mono and stereo, decoded only since FFmpeg 7.1.5, come out as C / L R — levels per rank checked against `astats` on synthetic streams, 14/10). `fold` reads that order. What differs is the **encoder**:
 
 | Encoder | Takes | Verified by |
@@ -1433,7 +1435,7 @@ TrueHD tracks of the library (62 Atmos 4-substream 7.1, 3 two-substream 5.1) and
 encoder) to `astats`' levels, and fails on the 7.1.2 module. Against native FFmpeg 9.0 on the same
 10 s, still within 0.01 dB on every channel (Braveheart at 0 and 600 s, Dog 51, Gattaca's 5.1).
 
-**"Enhance dialogue"** (beta, every account — DECISIONS §68) shapes the voices inside this re-encode:
+**"Enhance dialogue"** (every account — DECISIONS §68) shapes the voices inside this re-encode:
 `DialogueEnhancer` (`dialogueEnhance.ts`) runs between `fold` and the encoder's channel order, on the
 channels the chain delivers. It splits voice (the centre of a 3.0/5.1/7.1, the mid of a stereo) from
 background: the voice is equalised and only ever raised (a leveller driven by the voice alone), the

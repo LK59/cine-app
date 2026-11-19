@@ -868,7 +868,7 @@ dialogue into one ear; it was written from the format's specification, held for 
 caught only by a viewer on Chrome — everyone else here is on Safari, where E-AC3 is carried
 untouched and none of this code runs. **And the channel count does not name the layout**: five
 channels is a 5.0 in one file and a 4.1 in another, seven is a 6.1 whose fifth rank is a back
-centre. The decoder gives the count and nothing else (mediabunny exposes no layout), so anything
+centre. The decoder gives the count and nothing else (our decoders hand back planes, not a layout), so anything
 outside 1/2/3/6/8 keeps its first three planes — L, R, C, the only ranks every layout agrees on —
 and the rest is dropped rather than guessed.
 

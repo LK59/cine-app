@@ -404,7 +404,7 @@ player or casting) and resumes a few minutes after; it can also be paused by han
 after a restart. The index lives in `data/repliques.db` (a few hundred kilobytes per film), is
 left out of the nightly database copy, and can be rebuilt at any time.
 
-**Offline downloads** (beta). A viewer can download a film, an episode or a season to watch without
+**Offline downloads.** A viewer can download a film, an episode or a season to watch without
 a network. Jellyfin prepares a lighter version through its transcoding API (720p at about 2 Mbit/s,
 or 1080p at about 4 Mbit/s), so it costs Jellyfin CPU, like the server player. No media folder needs mounting: the copy is written to
 `data/offline/`, fetched by the device into the browser's storage, and deleted from the server three
