@@ -773,7 +773,8 @@ by frame, canvas render, hand-held audio clock, HDR→SDR in a shader). It was r
 ten sessions in three weeks, all of them tests, every one ending in the same server fallback a
 second later, and every reason that once led there now handled by the native path. What it taught
 the project, and where to find it: [`docs/lecteur-canvas.md`](docs/lecteur-canvas.md), tag
-`lecteur-canvas-final-2026-09-24`.
+`lecteur-canvas-final-2026-09-24`. Everything built then removed, or examined then set aside, is listed in
+[`docs/abandons.md`](docs/abandons.md).
 
 **Resuming a few seconds earlier** (`resumeRewind.ts`, native player): opening a title this
 device has not played for ten minutes — the next day, or after the TV — starts 5 s before the resume
