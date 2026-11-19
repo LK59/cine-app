@@ -19,6 +19,7 @@ import {
 } from "./audioDemux";
 import { decoderClassFor } from "./decoderClasses";
 import { openAc3DtsDecoder } from "./truehd/truehdDecoder";
+import { noteLumenFacts } from "./lumenFacts";
 
 /** Combien de son par message au worker : un quart de seconde, comme le TrueHD (truehdAudio.ts). */
 const BATCH_S = 0.25;
@@ -35,6 +36,7 @@ function ownWasmOpener(name: string) {
   const which = name === "ac3" ? 0 : name === "eac3" ? 1 : 2;
   return async (onFrame: (f: RawFrame) => void, onError: (e: unknown) => void): Promise<PacketDecoder> => {
     const decoder = await openAc3DtsDecoder(which);
+    noteLumenFacts({ decoder: `ffmpeg-7.1.5-${name}`, thread: decoder.thread, ...(decoder.workerRefusal !== undefined ? { workerRefusal: decoder.workerRefusal } : {}) });
     let batch: DemuxedAudioPacket[] = [];
     let closed = false;
     const send = async () => {
@@ -233,6 +235,7 @@ export function openOwnAudioTrack(
     throw new Error(`aucun décodeur noté pour ${names.name}`);
   }
   const stats = newAudioDemuxStats();
+  if (!decoderName.startsWith("ffmpeg-")) noteLumenFacts({ decoder: decoderName });
   return {
     format: { sampleRate, numberOfChannels },
     samples: (fromSeconds: number) => decodedFrom(audioPacketsFrom(source, file, trackNumber, fromSeconds, stats), opener, fromSeconds, sampleRate),

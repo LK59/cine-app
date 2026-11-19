@@ -2543,6 +2543,8 @@
       "interfaceAuto": "Automatique",
       "interfaceTouch": "Tactile",
       "interfaceDesktop": "Ordinateur",
+      "lumenAudio": "Son par Lumen (essai)",
+      "lumenAudioHint": "Le son que le navigateur ne lit pas est lu et décodé par Laterna, sans mediabunny. Pris en compte au prochain film.",
       "guidedScroll": "Défilement guidé",
       "guidedScrollHint": "Sur ordinateur, l'accueil se cale sur une rangée entière et les fiches sur une page entière. Coupé, la page défile librement.",
       "showBooks": "Afficher les livres",

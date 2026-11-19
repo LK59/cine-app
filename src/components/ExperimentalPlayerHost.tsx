@@ -7,6 +7,7 @@ import type { NativeSubtitleSync } from "@/components/playerNative/useNativeSubt
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { playerBootstrapOptions } from "@/lib/swr";
+import { lumenAudioOn } from "@/lib/lumenAudio";
 import { watchFirstStreamRequest, type StreamRequestWatch } from "@/lib/streamRequestTiming";
 import { decodingFields } from "@/lib/webcodecs/decodingInfo";
 import { advanceTo, closePlayerSession } from "@/components/player/playerClose";
@@ -146,6 +147,7 @@ import {
 import {
   aacRouteFacts,
   audioLeadGapFacts,
+  lumenAudioFacts,
   trueHdThreadFacts,
   castSubtitleOf,
   generationMenu,
@@ -1964,6 +1966,9 @@ export function ExperimentalPlayerHost({
         ...audioLeadGapFacts(remuxRef.current),
         // Écrit seulement quand il est actif : la ligne de tout autre compte ne change pas.
         ...(openedDialogue !== "off" ? { dialogue: openedDialogue } : {}),
+        // « Son par Lumen » (essai demux-son) et, s'il a servi, qui a décodé et dans quel fil. Écrit
+        // seulement quand l'essai est allumé : la ligne de tout autre compte ne change pas.
+        ...lumenAudioFacts(),
         // Ce que la réserve d'avance s'autorise sur cet appareil — c'était la ligne `reserve/départ`,
         // une requête de plus à chaque pipeline (13/10/2026, `reservePlanFacts`).
         ...reservePlanFacts(),
@@ -2418,6 +2423,8 @@ export function ExperimentalPlayerHost({
       audioTrackNumber: wantedAudioRef.current,
       // « Améliorer les dialogues », lu à cette ouverture — absent tant qu'il est désactivé.
       ...(openedDialogue !== "off" ? { dialogue: openedDialogue } : {}),
+      // « Son par Lumen » (essai demux-son, administrateurs) — absent tant qu'il est coupé.
+      ...(lumenAudioOn() ? { audioChain: "lumen" as const } : {}),
       // Reconstruit pour un changement de piste pendant une pause : rien ne doit le relancer, ni
       // ce composant (voir startRemux) ni la garde de démarrage de la source.
       startPaused: lifecycle.keepPaused,

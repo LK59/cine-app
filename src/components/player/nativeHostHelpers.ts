@@ -4,6 +4,8 @@
 import { warmNextEpisode } from "@/lib/nextEpisodeWarmup";
 import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
 import { takeAacDecodeRoute, takeTrueHdThread } from "@/lib/webcodecs/softwareAudio";
+import { takeLumenFacts } from "@/lib/webcodecs/lumenFacts";
+import { lumenAudioOn } from "@/lib/lumenAudio";
 import { audioLeadGapFields, type AudioLeadGap } from "@/lib/webcodecs/audioLeadGap";
 import type { SeekTiming } from "@/lib/hostSeek";
 import type { SeekServed } from "@/lib/webcodecs/mseTypes";
@@ -55,6 +57,22 @@ export function trueHdThreadFacts(): Record<string, unknown> {
   const thread = takeTrueHdThread();
   if (!thread) return {};
   return { truehdThread: thread.thread, ...(thread.workerRefusal !== undefined ? { truehdWorkerError: thread.workerRefusal } : {}) };
+}
+
+/**
+ * « Son par Lumen » (essai demux-son, 19/11/2026) : `audioChain: "lumen"` quand l'essai est allumé
+ * pour ce compte, et, si une piste décodée a pris ce chemin, `lumenDecoder` (« ffmpeg-7.1.5-eac3 »,
+ * « flac », « navigateur »…) et le fil (`lumenThread`, `lumenWorkerError`). Rien quand il est coupé.
+ */
+export function lumenAudioFacts(): Record<string, unknown> {
+  if (!lumenAudioOn()) return {};
+  const facts = takeLumenFacts();
+  return {
+    audioChain: "lumen",
+    ...(facts ? { lumenDecoder: facts.decoder } : {}),
+    ...(facts?.thread ? { lumenThread: facts.thread } : {}),
+    ...(facts?.workerRefusal !== undefined ? { lumenWorkerError: facts.workerRefusal } : {}),
+  };
 }
 
 /**

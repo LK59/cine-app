@@ -2543,6 +2543,8 @@
       "interfaceAuto": "Automatisch",
       "interfaceTouch": "Touch",
       "interfaceDesktop": "Computer",
+      "lumenAudio": "Ton durch Lumen (Test)",
+      "lumenAudioHint": "Ton, den der Browser nicht abspielt, wird von Laterna gelesen und dekodiert, ohne mediabunny. Gilt ab dem nächsten Film.",
       "guidedScroll": "Geführtes Scrollen",
       "guidedScrollHint": "Am Computer rastet die Startseite auf eine ganze Reihe und die Titelseiten auf eine ganze Seite ein. Aus: Die Seite scrollt frei.",
       "showBooks": "Bücher anzeigen",

@@ -19,7 +19,9 @@ export async function GET(req: NextRequest) {
   const showBooks = userPrefsDb.getShowBooks(userId);
   // « Précédemment » (DECISIONS.md §137) : coupé, rien n'est ni affiché ni préparé pour ce compte.
   const showRecap = userPrefsDb.getShowRecap(userId);
-  return NextResponse.json({ lang, guidedScroll, showBooks, showRecap, homeOwn: own, homeDefaults });
+  // « Son par Lumen » (essai demux-son, 19/11/2026) : n'existe que pour un administrateur.
+  const lumen = session.role === "admin" ? { lumenAudio: userPrefsDb.getLumenAudio(userId) } : {};
+  return NextResponse.json({ lang, guidedScroll, showBooks, showRecap, homeOwn: own, homeDefaults, ...lumen });
 }
 
 export async function PUT(req: NextRequest) {
@@ -37,6 +39,14 @@ export async function PUT(req: NextRequest) {
   if (typeof body?.guidedScroll === "boolean") {
     userPrefsDb.setGuidedScroll(userId, body.guidedScroll);
     return NextResponse.json({ ok: true, guidedScroll: body.guidedScroll });
+  }
+
+  // « Son par Lumen » (essai demux-son) : un administrateur seulement — le proxy laisse passer cette
+  // route pour tout compte, c'est donc ici qu'on refuse.
+  if (typeof body?.lumenAudio === "boolean") {
+    if (session.role !== "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    userPrefsDb.setLumenAudio(userId, body.lumenAudio);
+    return NextResponse.json({ ok: true, lumenAudio: body.lumenAudio });
   }
 
   // « Afficher les livres » (DECISIONS.md §127) : une mise à jour à elle seule.

@@ -63,6 +63,8 @@ export interface RemuxPlaybackOptions {
    * le chemin d'avant. Lu ici une fois et passé au remultiplexeur de cette ouverture seulement.
    */
   dialogue?: DialogueMode;
+  /** « Son par Lumen » (`RemuxOptions.audioChain`, essai demux-son) — absent : mediabunny, comme avant. */
+  audioChain?: "lumen";
   /** `facts` : ce que le relais emporte d'une zone illisible (`facts.unreadableZone`, §93). */
   onError: (message: string, kind?: "network" | "playback", facts?: Record<string, unknown>) => void;
   /** Une zone illisible tient la lecture, ou un saut l'a quittée — voir `MseCallbacks.onUnreadableZone`. */
@@ -310,7 +312,11 @@ async function probeOpened(source: ByteSource, options: RemuxPlaybackOptions, li
     dimensions: { width: videoTrack.video?.width ?? 1920, height: videoTrack.video?.height ?? 1080 },
     videoRangeType: options.videoRangeType,
     startSeconds: options.startSeconds,
-    remux: { lightCapNits: lightCap, ...(options.dialogue && options.dialogue !== "off" ? { dialogue: options.dialogue } : {}) },
+    remux: {
+      lightCapNits: lightCap,
+      ...(options.dialogue && options.dialogue !== "off" ? { dialogue: options.dialogue } : {}),
+      ...(options.audioChain ? { audioChain: options.audioChain } : {}),
+    },
   });
 
   trace(`chemin choisi : ${NATIVE_PATH}`);

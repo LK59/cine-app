@@ -2543,6 +2543,8 @@
       "interfaceAuto": "Automatic",
       "interfaceTouch": "Touch",
       "interfaceDesktop": "Computer",
+      "lumenAudio": "Sound by Lumen (trial)",
+      "lumenAudioHint": "Sound the browser can't play is read and decoded by Laterna, without mediabunny. Applies from the next film.",
       "guidedScroll": "Guided scrolling",
       "guidedScrollHint": "On a computer, the home screen settles on a whole row and title pages on a whole page. Off, pages scroll freely.",
       "showBooks": "Show books",
