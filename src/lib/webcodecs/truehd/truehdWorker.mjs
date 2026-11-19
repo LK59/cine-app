@@ -97,7 +97,9 @@ export function serveTrueHd(scope) {
       case "open": {
         try {
           if (!wasm) throw new Error("module TrueHD absent");
-          const decoder = wasm._thd_open(message.mlp ? 1 : 0);
+          // `which` : le codec du module AC-3/DTS (0, 1, 2), qui sert ce même protocole
+          // (ac3dts/ac3dtsCore.ts) ; absent, le TrueHD ou le MLP comme avant.
+          const decoder = wasm._thd_open(typeof message.which === "number" ? message.which : message.mlp ? 1 : 0);
           if (!decoder) throw new Error("le décodeur TrueHD n'a pas pu s'ouvrir");
           decoders.set(message.id, { decoder, scratch: { input: 0, inputSize: 0 } });
           answer({ req: message.req, ok: true });

@@ -19,6 +19,7 @@
 // Il est terminé quand plus aucun décodeur n'est ouvert et que rien n'attend, après IDLE_MS : une
 // reconstruction le retrouve, la fermeture du lecteur rend sa mémoire. Il ne s'accumule donc jamais.
 import { TrueHdCore, type DecodedBatch } from "./truehdCore";
+import { Ac3DtsCore, type Ac3DtsCodec } from "../ac3dts/ac3dtsCore";
 
 export type { DecodedBatch };
 
@@ -53,8 +54,8 @@ export function yieldToBrowser(): Promise<void> {
  * Le chemin d'avant le worker, inchangé : le même décodage sur le fil principal, un lot à la fois,
  * suivi d'un retour au navigateur — aucune tâche ne dépasse quelques millisecondes.
  */
-async function openOnMainThread(mlp: boolean, workerRefusal: string): Promise<TrueHdDecoder> {
-  const core = await TrueHdCore.create(mlp);
+async function openOnMainThread(kind: Kind, open: OpenSpec, workerRefusal: string): Promise<TrueHdDecoder> {
+  const core = kind === "truehd" ? await TrueHdCore.create(!!open.mlp) : await Ac3DtsCore.create(open.which as Ac3DtsCodec);
   return {
     async decode(blocks) {
       const batch = core.decode(blocks);
@@ -73,7 +74,21 @@ const READY_TIMEOUT_MS = 20_000;
 /** Combien un worker sans décodeur ouvert est gardé — de quoi traverser une reconstruction. */
 const IDLE_MS = 10_000;
 
+/**
+ * Les modules servis par ce worker : le TrueHD, et depuis l'essai demux-son (19/11/2026) l'AC-3/E-AC3/
+ * DTS de FFmpeg 7.1.5 (tools/ac3dts-wasm), qui expose exactement les mêmes fonctions. Un worker par
+ * module : chacun charge le sien, et un film qui n'a que de l'AC-3 ne paie pas le TrueHD.
+ */
+type Kind = "truehd" | "ac3dts";
+/** Ce que le worker reçoit pour ouvrir un décodeur : `mlp` pour le TrueHD, `which` pour l'AC-3/DTS. */
+interface OpenSpec {
+  mlp?: boolean;
+  which?: number;
+}
+const LABEL: Record<Kind, string> = { truehd: "TrueHD", ac3dts: "AC-3/DTS" };
+
 interface Host {
+  kind: Kind;
   worker: Worker;
   ready: Promise<void>;
   pending: Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>;
@@ -83,29 +98,29 @@ interface Host {
   dead: Error | null;
 }
 
-let host: Host | null = null;
+const hosts = new Map<Kind, Host>();
 /**
  * Pourquoi le worker n'a pas pu naître dans cette page (CSP, navigateur sans worker de module,
  * module introuvable, délai) : retenu pour la vie de la page — réessayer, c'était payer le même
  * échec, et jusqu'à vingt secondes, à chaque reconstruction.
  */
-let refusedHere: string | null = null;
+const refusedHere = new Map<Kind, string>();
 let requests = 0;
 let decoders = 0;
 
 const reasonOf = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 160);
 
-const lost = (error: Error) => new Error(`worker TrueHD perdu (${error.message})`);
+const lost = (h: Host, error: Error) => new Error(`worker ${LABEL[h.kind]} perdu (${error.message})`);
 
 function retire(h: Host, error: Error): void {
   if (h.dead) return;
   h.dead = error;
   if (h.idle) clearTimeout(h.idle);
   h.idle = null;
-  for (const entry of h.pending.values()) entry.reject(lost(error));
+  for (const entry of h.pending.values()) entry.reject(lost(h, error));
   h.pending.clear();
   h.worker.terminate();
-  if (host === h) host = null;
+  if (hosts.get(h.kind) === h) hosts.delete(h.kind);
 }
 
 /** Plus personne : le worker est terminé après IDLE_MS, sauf si un décodeur s'ouvre d'ici là. */
@@ -113,7 +128,7 @@ function releaseIfIdle(h: Host): void {
   if (h.dead || h.users > 0 || h.pending.size > 0 || h.idle) return;
   h.idle = setTimeout(() => {
     h.idle = null;
-    if (h.users === 0 && h.pending.size === 0) retire(h, new Error("worker TrueHD terminé"));
+    if (h.users === 0 && h.pending.size === 0) retire(h, new Error(`worker ${LABEL[h.kind]} terminé`));
   }, IDLE_MS);
 }
 
@@ -144,21 +159,23 @@ export function absoluteHref(url: { href: string }): string {
   return base ? new URL(url.href, base).href : new URL(url.href).href;
 }
 
-function createHost(): Host {
+function createHost(kind: Kind): Host {
   // Les deux fichiers sont copiés tels quels par le build ; le module WebAssembly est donné au worker
   // par son adresse, qu'un import relatif ne retrouverait pas sous le nom haché de la copie.
   const workerUrl = new URL("./truehdWorker.mjs", import.meta.url);
-  const wasmUrl = new URL("./truehd-wasm.mjs", import.meta.url);
+  // Deux adresses écrites en entier : le build ne copie que ce qu'il voit nommé ainsi.
+  const wasmUrl = kind === "truehd" ? new URL("./truehd-wasm.mjs", import.meta.url) : new URL("../ac3dts/ac3dts-wasm.mjs", import.meta.url);
   const bootstrap = URL.createObjectURL(new Blob([`import ${JSON.stringify(absoluteHref(workerUrl))};\n`], { type: "text/javascript" }));
   let worker: Worker;
   try {
-    worker = new Worker(bootstrap, { type: "module", name: "truehd" });
+    worker = new Worker(bootstrap, { type: "module", name: kind });
   } catch (error) {
     URL.revokeObjectURL(bootstrap);
     throw error;
   }
   let settle!: { resolve: () => void; reject: (error: Error) => void };
   const h: Host = {
+    kind,
     worker,
     ready: new Promise<void>((resolve, reject) => (settle = { resolve, reject })),
     pending: new Map(),
@@ -207,7 +224,7 @@ function createHost(): Host {
 }
 
 function call<T>(h: Host, message: Record<string, unknown>, transfer: Transferable[] = []): Promise<T> {
-  if (h.dead) return Promise.reject(lost(h.dead));
+  if (h.dead) return Promise.reject(lost(h, h.dead));
   const req = ++requests;
   return new Promise<T>((resolve, reject) => {
     // Une erreur du décodeur lui-même (« mémoire épuisée… », « …n'a pas pu s'ouvrir ») revient avec
@@ -217,9 +234,9 @@ function call<T>(h: Host, message: Record<string, unknown>, transfer: Transferab
   });
 }
 
-async function openInWorker(h: Host, mlp: boolean): Promise<TrueHdDecoder> {
+async function openInWorker(h: Host, open: OpenSpec): Promise<TrueHdDecoder> {
   const id = ++decoders;
-  await call(h, { op: "open", id, mlp });
+  await call(h, { op: "open", id, ...open });
   let closed = false;
   return {
     decode(blocks) {
@@ -259,15 +276,27 @@ async function openInWorker(h: Host, mlp: boolean): Promise<TrueHdDecoder> {
   };
 }
 
-export async function openTrueHdDecoder(mlp: boolean): Promise<TrueHdDecoder> {
-  if (refusedHere !== null) return openOnMainThread(mlp, refusedHere);
-  if (typeof Worker === "undefined") return openOnMainThread(mlp, "pas de Worker");
+export function openTrueHdDecoder(mlp: boolean): Promise<TrueHdDecoder> {
+  return openWasmDecoder("truehd", { mlp });
+}
+
+/** Le décodeur AC-3 (0), E-AC3 (1) ou DTS (2) de FFmpeg 7.1.5 — même worker, même repli (essai demux-son). */
+export function openAc3DtsDecoder(which: Ac3DtsCodec): Promise<TrueHdDecoder> {
+  return openWasmDecoder("ac3dts", { which });
+}
+
+async function openWasmDecoder(kind: Kind, open: OpenSpec): Promise<TrueHdDecoder> {
+  const refused = refusedHere.get(kind);
+  if (refused !== undefined) return openOnMainThread(kind, open, refused);
+  if (typeof Worker === "undefined") return openOnMainThread(kind, open, "pas de Worker");
   let h: Host;
   try {
-    h = host ?? (host = createHost());
+    h = hosts.get(kind) ?? createHost(kind);
+    hosts.set(kind, h);
   } catch (error) {
-    refusedHere = reasonOf(error);
-    return openOnMainThread(mlp, refusedHere);
+    const reason = reasonOf(error);
+    refusedHere.set(kind, reason);
+    return openOnMainThread(kind, open, reason);
   }
   // Réservé tout de suite : le worker ne doit pas être terminé pendant qu'on attend qu'il soit prêt.
   h.users++;
@@ -277,11 +306,12 @@ export async function openTrueHdDecoder(mlp: boolean): Promise<TrueHdDecoder> {
     await h.ready;
   } catch (error) {
     h.users--;
-    refusedHere = reasonOf(error);
-    return openOnMainThread(mlp, refusedHere);
+    const reason = reasonOf(error);
+    refusedHere.set(kind, reason);
+    return openOnMainThread(kind, open, reason);
   }
   try {
-    return await openInWorker(h, mlp);
+    return await openInWorker(h, open);
   } catch (error) {
     h.users--;
     releaseIfIdle(h);

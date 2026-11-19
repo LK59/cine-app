@@ -18,52 +18,55 @@ import {
   type RawFrame,
 } from "./audioDemux";
 import { decoderClassFor } from "./decoderClasses";
-import { closeDecoder, decodeBlocks, type DecodeScratch } from "./truehd/truehdWorker.mjs";
-import type { Ac3DtsModule } from "./ac3dts/ac3dts-wasm.mjs";
+import { openAc3DtsDecoder } from "./truehd/truehdDecoder";
 
-/** Le module AC-3/E-AC3/DTS de FFmpeg 7.1.5 (tools/ac3dts-wasm), instancié une fois. */
-let ac3dts: Promise<Ac3DtsModule> | null = null;
-function ac3dtsModule(): Promise<Ac3DtsModule> {
-  if (!ac3dts) {
-    ac3dts = import("./ac3dts/ac3dts-wasm.mjs").then(({ default: create }) => create());
-    ac3dts.catch(() => {
-      ac3dts = null;
-    });
-  }
-  return ac3dts;
-}
+/** Combien de son par message au worker : un quart de seconde, comme le TrueHD (truehdAudio.ts). */
+const BATCH_S = 0.25;
 
 /**
- * NOTRE décodeur AC-3/E-AC3/DTS (FFmpeg 7.1.5 compilé ici, la même colle que le TrueHD) — sur le fil
- * principal pour cet essai ; le worker du TrueHD (truehdWorker.mjs) sait déjà le porter.
+ * NOTRE décodeur AC-3/E-AC3/DTS (FFmpeg 7.1.5, tools/ac3dts-wasm) dans le worker du TrueHD — ou sur
+ * le fil principal, un lot à la fois, quand le worker n'a pas pu naître (truehdDecoder.ts).
+ *
+ * Les paquets partent par lots d'un quart de seconde : un message par trame AC-3 (32 ms), c'était
+ * trente allers-retours par seconde de son. Chaque paquet garde son instant : une trame décodée
+ * porte celui de son paquet, comme le fait le décodeur de mediabunny.
  */
 function ownWasmOpener(name: string) {
   const which = name === "ac3" ? 0 : name === "eac3" ? 1 : 2;
   return async (onFrame: (f: RawFrame) => void, onError: (e: unknown) => void): Promise<PacketDecoder> => {
-    const m = await ac3dtsModule();
-    const decoder = m._thd_open(which);
-    if (!decoder) throw new Error(`le décodeur ${name} n'a pas pu s'ouvrir`);
-    const scratch: DecodeScratch = { input: 0, inputSize: 0 };
+    const decoder = await openAc3DtsDecoder(which);
+    let batch: DemuxedAudioPacket[] = [];
     let closed = false;
+    const send = async () => {
+      if (batch.length === 0 || closed) return;
+      const packets = batch;
+      batch = [];
+      try {
+        const out = await decoder.decode(packets.map((p) => p.data));
+        if (closed) return;
+        let at = 0;
+        packets.forEach((packet, i) => {
+          const frames = out.frames[i];
+          if (frames <= 0) return;
+          const planes = Array.from({ length: out.channels }, () => new Float32Array(frames));
+          for (let f = 0; f < frames; f++) for (let c = 0; c < out.channels; c++) planes[c][f] = out.pcm[(at + f) * out.channels + c];
+          at += frames;
+          onFrame({ planes, sampleRate: out.sampleRate, timestamp: packet.timestamp });
+        });
+      } catch (error) {
+        onError(error);
+      }
+    };
     return {
       decode: async (p: DemuxedAudioPacket) => {
-        if (closed) return;
-        try {
-          const batch = decodeBlocks(m as never, decoder, scratch, [p.data]);
-          const frames = batch.frames[0];
-          if (frames <= 0) return;
-          const planes = Array.from({ length: batch.channels }, () => new Float32Array(frames));
-          for (let i = 0; i < frames; i++) for (let c = 0; c < batch.channels; c++) planes[c][i] = batch.pcm[i * batch.channels + c];
-          onFrame({ planes, sampleRate: batch.sampleRate, timestamp: p.timestamp });
-        } catch (error) {
-          onError(error);
-        }
+        batch.push(p);
+        if (p.timestamp - batch[0].timestamp >= BATCH_S) await send();
       },
-      flush: async () => {},
+      flush: send,
       close: () => {
         if (closed) return;
         closed = true;
-        closeDecoder(m as never, decoder, scratch);
+        decoder.close();
       },
     };
   };
