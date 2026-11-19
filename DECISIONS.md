@@ -12399,3 +12399,35 @@ l'étiquette « Remux serveur ») : le journal garde des semaines d'historique.
 **Tests.** `lumen-archive.test.ts` (la route et le proxy), `ServiceWorkerRegistration-clear.test.tsx` (les clés),
 `activity-lumen-chromecast.test.ts` (les anciennes lignes à l'Activité) ; les empreintes du lecteur natif, du lecteur
 serveur et de `MseSource` inchangées.
+
+## 197. « Son par Lumen » : le son décodé lu par notre lecteur de conteneur et décodé par notre FFmpeg 7.1.5, à l'essai pour les administrateurs (19/11/2026)
+
+**La règle.** Une piste son que le navigateur ne lit pas (AC-3, E-AC3, DTS, FLAC, l'Opus et l'AAC qu'il refuse) peut
+être lue par **notre** lecteur Matroska/MP4 — celui qui sert déjà l'image — au lieu de celui de mediabunny, et
+l'AC-3/E-AC3/DTS décodés par **notre** module FFmpeg 7.1.5 (`tools/ac3dts-wasm`, même chaîne figée que le TrueHD).
+Option du remultiplexeur `RemuxOptions.audioChain: "lumen"`, absente par défaut : le chemin d'avant, à l'octet près.
+Allumée par une préférence du compte, **administrateurs seulement** (`lumen_audio`, `/api/user/preferences` ne la
+renvoie ni ne l'accepte pour un autre rôle), lue au prochain film sur le miroir de l'appareil (`lumenAudio.ts`).
+
+**Où.** `audioDemux.ts` (les paquets depuis l'instant voulu, l'étalement des trames laçées, l'horloge et le tri du
+décodé — copiés de `AudioSampleSink` pour un son identique), `ownAudio.ts` (le décodeur selon le codec),
+`ac3dts/ac3dtsCore.ts` et le worker du TrueHD (`truehdDecoder.ts`, un worker par module, `which` à l'ouverture),
+`decoderClasses.ts` (les décodeurs de mediabunny, non exportés, notés à leur enregistrement — pour comparer), `lumenFacts.ts`.
+
+**Mesuré avant (100 pistes, `demux-son-bench.spec.ts`, `demux-son-decodeurs.spec.ts`).** Octets des paquets identiques
+partout ; son décodé identique à l'échantillon sur 328 points AC-3/E-AC3/DTS avec nos décodeurs. Ouverture sans relire
+en-tête ni index ; ~40 % d'octets demandés en moins par saut ; décodage 760 ms contre 1 187 ms pour 30 s (Node).
+
+**Différent exprès.** Une trame laçée dans le dernier bloc d'un cluster prend sa vraie place : mediabunny donnait à toutes
+le même instant (Opus laçé : 21 chevauchements en 30 s sur *JoJo*, chemin des iPhone — `demux-son-opus.spec.ts`). Une
+piste qui se tait 45 s (`GIVE_UP_S`) est finie pour cette lecture, au lieu de lire jusqu'à la fin du fichier.
+
+**Journal.** Allumé, `start` porte `audioChain: "lumen"`, `lumenDecoder` (« ffmpeg-7.1.5-eac3 », « flac »,
+« navigateur ») et `lumenThread` / `lumenWorkerError`. Coupé, rien.
+
+**Tests.** `webcodecs-audioDemux`, `webcodecs-ac3dts-worker` (worker = fil principal au bit près, fixtures synthétiques
+`fixtures/ac3dts`), `webcodecs-decoderClasses`, `lumen-audio-worker-failure` (une panne mène au lecteur serveur, jamais
+au silence), la route dans `misc-routes-batch2`. Empreintes du lecteur inchangées.
+
+**À faire avant de l'allumer pour tous.** Séances réelles (iPhone, Opus d'animation, AAC refusé), lecture du journal,
+puis retrait de mediabunny du lecteur (le FLAC hérite encore de sa classe de base).
