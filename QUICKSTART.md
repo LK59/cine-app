@@ -132,7 +132,9 @@ version. On a new installation it also prints the **one-time setup code** the as
 ```bash
 docker compose logs cine-app | grep "setup code"
 # [setup] One-time setup code: ABCD-EFGH-JKLM — enter it in the setup assistant to create the administrator account (valid until that account exists).
-``` If the container stops, its last log line says why — most often a `./data` folder that
+```
+
+If the container stops, its last log line says why — most often a `./data` folder that
 belongs to root (`sudo chown -R 1001:1001 data`, then `docker compose up -d` again). The other cases
 are listed in [DEPLOYMENT.md, step 2](DEPLOYMENT.md#2-start-the-container).
 
