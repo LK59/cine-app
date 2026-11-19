@@ -66,7 +66,7 @@ let lastAacRoute: "wasm-decode" | "browser-decode" | null = null;
 /** La piste a-t-elle un décodeur sur le chemin « Son par Lumen » (ownAudio.ts, `codecNamesFor`) ? */
 function ownChainTakes(file: MatroskaFile, trackNumber: number): boolean {
   const codecId = file.tracks.find((t) => t.number === trackNumber)?.codecId ?? "";
-  return /^A_(AC3|EAC3|DTS|FLAC|OPUS|AAC)(\/|$)/.test(codecId);
+  return /^A_(AC3|EAC3|DTS|FLAC|OPUS|AAC|MPEG\/L3)(\/|$)/.test(codecId) || codecId.startsWith("A_PCM/");
 }
 
 /** La dernière piste ouverte par nos paquets (essai demux-son) — pour le banc. */
@@ -208,7 +208,7 @@ export class SoftwareAudioTrack {
   ): Promise<SoftwareAudioTrack> {
     // « Son par Lumen » complet (§197) : nos paquets et nos décodeurs — mediabunny n'est ni chargé
     // ni consulté. Le FLAC par libFLAC directement, l'Opus et l'AAC par l'AudioDecoder du navigateur.
-    // Un codec que ce chemin ne nomme pas (PCM, Vorbis, MP3…) reste à mediabunny : mieux vaut l'ancien
+    // Un codec que ce chemin ne nomme pas (Vorbis — aucune piste ici —, et ce qui viendrait) reste à mediabunny : mieux vaut l'ancien
     // chemin qu'un film parti au lecteur serveur pendant l'essai.
     if (demux === "nôtre" && decoders === "nôtres" && file && ownChainTakes(file, trackNumber)) {
       let own;

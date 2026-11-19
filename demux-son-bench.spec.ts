@@ -22,7 +22,7 @@ import { audioPacketsFrom } from "@/lib/webcodecs/audioDemux";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
 
 const WINDOW = Number(process.env.DS_SECONDS ?? 30);
-const NODE_DECODES = new Set(["A_AC3", "A_EAC3", "A_DTS", "A_FLAC"]);
+const NODE_DECODES = new Set(["A_AC3", "A_EAC3", "A_DTS", "A_FLAC", "A_PCM/INT/LIT"]);
 const CHUNK = 1 << 20;
 
 interface Counted extends ByteSource {

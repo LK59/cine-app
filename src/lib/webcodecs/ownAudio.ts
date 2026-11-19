@@ -84,6 +84,10 @@ export function codecNamesFor(codecId: string, codecPrivate: Uint8Array | null):
   if (codecId === "A_DTS" || codecId.startsWith("A_DTS/")) return { name: "dts", webCodecs: "dtsc" };
   if (codecId === "A_FLAC") return { name: "flac", webCodecs: "flac" };
   if (codecId === "A_OPUS") return { name: "opus", webCodecs: "opus" };
+  // MP3 : l'AudioDecoder du navigateur, comme mediabunny (*The Leftovers* VF, 19/11/2026).
+  if (codecId === "A_MPEG/L3") return { name: "mp3", webCodecs: "mp3" };
+  // PCM : une simple conversion d'octets, ici (`pcmOpener`), comme mediabunny la faisait en JavaScript.
+  if (codecId.startsWith("A_PCM/")) return { name: "pcm", webCodecs: "pcm" };
   if (codecId === "A_AAC" || codecId.startsWith("A_AAC/")) {
     // L'objet AAC est dans les cinq premiers bits de l'AudioSpecificConfig (31 : échappé sur six).
     let aot = 2;
@@ -255,6 +259,49 @@ function stoppable<T>(inner: AsyncGenerator<T>, cancel: { stopped: boolean }): A
   return wrapped as unknown as AsyncGenerator<T>;
 }
 
+/**
+ * Le PCM d'un Matroska (`A_PCM/INT/LIT`, `/INT/BIG`, `/FLOAT/IEEE`), converti en plans Float32 —
+ * l'arithmétique de mediabunny (`PcmAudioDecoderWrapper` puis `AudioSample.copyTo`) : 8 bits non
+ * signés centrés sur 128, entiers signés divisés par 2^(bits−1), flottants tels quels. Un seul
+ * épisode de la bibliothèque en porte (19/11/2026).
+ */
+function pcmOpener(codecId: string, bitDepth: number, channels: number, sampleRate: number) {
+  const big = codecId === "A_PCM/INT/BIG";
+  const float = codecId === "A_PCM/FLOAT/IEEE";
+  const bytes = bitDepth / 8;
+  if (![1, 2, 3, 4, 8].includes(bytes) || (float && bytes < 4)) throw new Error(`PCM ${bitDepth} bits hors de ce chemin`);
+  const read = (view: DataView, at: number): number => {
+    if (float) return bytes === 4 ? view.getFloat32(at, !big) : view.getFloat64(at, !big);
+    switch (bytes) {
+      case 1:
+        return (view.getUint8(at) - 128) / 128;
+      case 2:
+        return view.getInt16(at, !big) / 32768;
+      case 3: {
+        const b0 = view.getUint8(at);
+        const b1 = view.getUint8(at + 1);
+        const b2 = view.getUint8(at + 2);
+        const v = big ? (b0 << 16) | (b1 << 8) | b2 : (b2 << 16) | (b1 << 8) | b0;
+        return ((v << 8) >> 8) / 8388608;
+      }
+      default:
+        return view.getInt32(at, !big) / 2147483648;
+    }
+  };
+  return async (onFrame: (f: RawFrame) => void): Promise<PacketDecoder> => ({
+    decode: async (p: DemuxedAudioPacket) => {
+      const frames = Math.floor(p.data.byteLength / (bytes * channels));
+      if (frames <= 0) return;
+      const view = new DataView(p.data.buffer, p.data.byteOffset, p.data.byteLength);
+      const planes = Array.from({ length: channels }, () => new Float32Array(frames));
+      for (let i = 0; i < frames; i++) for (let c = 0; c < channels; c++) planes[c][i] = read(view, (i * channels + c) * bytes);
+      onFrame({ planes, sampleRate, timestamp: p.timestamp });
+    },
+    flush: async () => {},
+    close: () => {},
+  });
+}
+
 export interface OwnAudioTrack {
   format: { sampleRate: number; numberOfChannels: number };
   samples(fromSeconds: number): AsyncGenerator<DecodedFrame>;
@@ -295,13 +342,16 @@ export async function openOwnAudioTrack(
   if (decoders === "nôtres" && (names.name === "ac3" || names.name === "eac3" || names.name === "dts")) {
     opener = ownWasmOpener(names.name);
     decoderName = `ffmpeg-7.1.5-${names.name}`;
+  } else if (names.name === "pcm") {
+    opener = pcmOpener(track.codecId, track.audio?.bitDepth ?? 16, numberOfChannels, sampleRate);
+    decoderName = "pcm";
   } else if (decoders === "nôtres" && names.name === "flac") {
     opener = flacOpener(config);
     decoderName = "flac";
   } else if (Custom && core) {
     opener = customOpener(core, Custom, names.name, config);
     decoderName = names.name === "flac" ? "flac" : `mediabunny-${names.name === "dts" ? "dts" : "ac3"}`;
-  } else if (names.name === "opus" || names.name === "aac") {
+  } else if (names.name === "opus" || names.name === "aac" || names.name === "mp3") {
     // Demandé au navigateur avant d'ouvrir, comme `canDecode` le faisait : un AAC refusé repart alors
     // vers le décodeur AAC en WebAssembly (softwareAudio.ts), au lieu d'échouer en pleine lecture.
     const Decoder = (globalThis as { AudioDecoder?: typeof AudioDecoder }).AudioDecoder;
