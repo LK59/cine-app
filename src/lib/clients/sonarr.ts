@@ -145,6 +145,9 @@ export const sonarr = {
       headers,
       body: JSON.stringify(payload),
     }),
+  /** La série et ses fichiers, sans exclure une demande future (le tri, DECISIONS.md §198). */
+  deleteSeriesWithFiles: (id: number) =>
+    fetchJson<void>(`${cfg.url}/api/v3/series/${id}?deleteFiles=true&addImportListExclusion=false`, { method: "DELETE", headers }),
   deleteSeries: (id: number) =>
     fetchJson<void>(`${cfg.url}/api/v3/series/${id}?deleteFiles=false`, { method: "DELETE", headers }),
   getHistory: (pageSize = 20) =>

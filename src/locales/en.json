@@ -78,7 +78,8 @@
     "backToCinema": "Back to Cinema",
     "accountPreferences": "Your preferences are in Account",
     "label": "Management navigation",
-    "libraryCheck": "Library check"
+    "libraryCheck": "Library check",
+    "tri": "Cleanup"
   },
   "common": {
     "loading": "Loading...",
@@ -4630,5 +4631,135 @@
       "rejected": "rejected"
     },
     "stale": "file changed since measured"
+  },
+  "tri": {
+    "title": "Library cleanup",
+    "subtitle": "What was never opened, who requested it, from which device — and complete removal, torrents included.",
+    "refresh": "Recompute",
+    "computedAt": "Computed {when}",
+    "stat": {
+      "never": "Never opened",
+      "library": "Library",
+      "freed": "Space freed by cleanup"
+    },
+    "tab": {
+      "titles": "Titles",
+      "accounts": "Accounts",
+      "removed": "Log"
+    },
+    "neverOpened": "Never opened",
+    "openedBy": "Opened by {n} account|Opened by {n} accounts",
+    "noRequester": "No request",
+    "flag": {
+      "documentary": "Documentary",
+      "animationMovie": "Animated film",
+      "animationSeries": "Animated series",
+      "tvMovie": "TV movie",
+      "lowRating": "Poorly rated",
+      "farFromProfile": "Far from profile"
+    },
+    "sort": {
+      "score": "Sort: review first",
+      "size": "Sort: largest",
+      "requested": "Sort: oldest requests",
+      "rating": "Sort: lowest rated",
+      "added": "Sort: added longest ago"
+    },
+    "filter": {
+      "search": "Search a title",
+      "allKinds": "Films and series",
+      "movies": "Films",
+      "series": "Series",
+      "allAccounts": "All accounts",
+      "count": "{n} title · {size}|{n} titles · {size}",
+      "empty": "No title matches.",
+      "more": "Show more ({n} left)"
+    },
+    "reason": {
+      "neverOpened": "Never opened by anyone",
+      "stale": "Not opened for six months",
+      "age": "Age of the request or addition",
+      "category": "Flagged category",
+      "rating": "Poorly rated",
+      "distance": "Far from what the requesting profile watches",
+      "requester": "Requested by a low-scoring account",
+      "size": "Space taken"
+    },
+    "detail": {
+      "facts": "The title",
+      "size": "Size",
+      "episodes": "Episodes",
+      "episodesValue": "{files} present of {total}",
+      "added": "Added",
+      "rating": "Rating",
+      "genres": "Genres",
+      "distance": "Distance from profile",
+      "why": "Why {score}",
+      "requests": "Requests ({n})",
+      "noRequest": "No request: added directly.",
+      "deviceUnknown": "unknown device",
+      "viewers": "Watched or started ({n})",
+      "noViewer": "Nobody has watched or started it.",
+      "playedEpisodes": "{n} episode|{n} episodes",
+      "noDate": "unknown date",
+      "sessions": "Sessions in Laterna ({n})",
+      "noSession": "No session in the log.",
+      "minutes": "{n} min watched|{n} min watched",
+      "more": "Show {n} more",
+      "less": "Collapse",
+      "removeTitle": "Remove"
+    },
+    "remove": {
+      "prepare": "Prepare removal…",
+      "planning": "Looking for files and torrents…",
+      "retry": "Retry",
+      "planTitle": "Everything that will go with “{title}”",
+      "freed": "Space freed (estimate)",
+      "files": "Library files",
+      "torrents": "Torrents, cross-seeds included",
+      "step": {
+        "qbit": "qBittorrent: {n} torrent removed with its files|qBittorrent: {n} torrents removed with their files",
+        "radarr": "Radarr: the film and its files",
+        "sonarr": "Sonarr: the series and its files",
+        "jellyseerr": "Jellyseerr: the media and its requests",
+        "jellyfin": "Jellyfin: library refresh"
+      },
+      "why": {
+        "shared": "same file",
+        "history": "downloaded for this title",
+        "same": "same content"
+      },
+      "skipped": "{n} torrent kept: one of its files also serves another title|{n} torrents kept: their files also serve another title",
+      "showFiles": "Show files ({n})",
+      "confirm": "Yes, remove everything",
+      "cancel": "Cancel",
+      "removing": "Removing…",
+      "wait": "Up to a minute: the space is measured on disk.",
+      "done": "“{title}” removed · {freed} freed"
+    },
+    "account": {
+      "summary": "{requests} requests · {opened} opened of {available} present ({pct} %)",
+      "neverOpenedSize": "never opened",
+      "parts": "The score",
+      "facts": "{last90} requests in 90 days · {burst} % in bursts · {devices} device types",
+      "profiles": "Profiles ({n})",
+      "noProfile": "No session in the log.",
+      "openedTitles": "{n} title opened|{n} titles opened",
+      "showRequests": "Show their requests"
+    },
+    "part": {
+      "openRate": "Watches what they request",
+      "rating": "Rating of their requests",
+      "space": "Space taken by unused titles",
+      "bursts": "No bursts",
+      "sharing": "Little account sharing",
+      "volume": "Reasonable volume"
+    },
+    "log": {
+      "empty": "Nothing has been removed by cleanup yet.",
+      "failed": "failed step",
+      "torrents": "{n} torrent|{n} torrents",
+      "requestedBy": "requested by {who}"
+    }
   }
 }

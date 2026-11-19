@@ -740,6 +740,20 @@ export const jellyfin = {
       { headers }
     ).then((res) => res.Items.filter(hasSomethingWatched)),
 
+  /**
+   * Ce qu'un compte a vu ou entamé, films et épisodes (avec la série de chaque épisode) — le tri,
+   * DECISIONS.md §198. `IsPlayed` puis `IsResumable` : Jellyfin n'accepte pas les deux d'un coup.
+   */
+  getWatchedOrStarted: async (userId: string) => {
+    const one = (filter: "IsPlayed" | "IsResumable") =>
+      fetchJson<{ Items: JellyfinItem[] }>(
+        `${cfg.url}/Users/${idSegment(userId)}/Items?Filters=${filter}&IncludeItemTypes=Movie,Episode&Recursive=true&CollapseBoxSetItems=false&Fields=UserData,SeriesId&EnableImages=false&Limit=20000`,
+        { headers }
+      ).then((res) => res.Items);
+    const [played, resumable] = await Promise.all([one("IsPlayed"), one("IsResumable")]);
+    return [...played, ...resumable];
+  },
+
   getFavorites: async (userId: string) =>
     fetchJson<{ Items: JellyfinItem[] }>(
       `${cfg.url}/Users/${idSegment(userId)}/Items?Filters=IsFavorite&IncludeItemTypes=Movie,Series&Recursive=true&Fields=ProviderIds,UserData,ImageTags,ProductionYear,RunTimeTicks&Limit=500`,

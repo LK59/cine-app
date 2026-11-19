@@ -147,6 +147,9 @@ export const radarr = {
       headers,
       body: JSON.stringify(payload),
     }),
+  /** Le film et ses fichiers, sans exclure une demande future (le tri, DECISIONS.md §198). */
+  deleteMovieWithFiles: (id: number) =>
+    fetchJson<void>(`${cfg.url}/api/v3/movie/${id}?deleteFiles=true&addImportExclusion=false`, { method: "DELETE", headers }),
   deleteMovie: (id: number) =>
     fetchJson<void>(`${cfg.url}/api/v3/movie/${id}?deleteFiles=false`, { method: "DELETE", headers }),
   deleteMovieFile: (fileId: number) =>

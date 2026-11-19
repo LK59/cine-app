@@ -12456,3 +12456,44 @@ classes (`decoderClasses.ts`), l'ancien `flacDecoder.ts` (son en-tête vit dans 
 propres à mediabunny ; `mediabunny`, `@mediabunny/ac3` et `@mediabunny/dts` quittent les dépendances. La référence
 du son est désormais `audio-ref-bench.spec.ts`, prise sur la chaîne prouvée identique. Empreintes du lecteur :
 identiques à celles de 10.62.2, d'avant Lumen.
+
+## 198. Le tri de la bibliothèque : ce qui n'a jamais été ouvert, qui l'a demandé, et la suppression complète (19/11/2026)
+
+**La règle.** Infrastructure → Tri (`/tri`, administrateur seul : `ADMIN_ONLY_PAGES`, `ADMIN_ONLY_READS`, et
+`adminOnly` dans chaque route) range chaque film et chaque série de Radarr/Sonarr du plus suspect au moins suspect,
+et supprime un titre **entièrement** après un aperçu et une confirmation.
+
+- **Ouvert** veut dire : vu ou entamé pour Jellyfin (n'importe quel client, compte par compte —
+  `getWatchedOrStarted`), ou une séance au `player.log` de Laterna. Les comptes de test et de secours ne comptent
+  pas. Un compte que Jellyfin ne sait pas lire fait échouer la collecte plutôt que de faire passer ses titres pour
+  jamais ouverts.
+- **Le score d'un titre** (`titleScore`, sur 100, rendu part par part) : jamais ouvert 35 (ou plus ouvert depuis six
+  mois 10), ancienneté de la demande ou de l'ajout 15, catégorie signalée 15 (documentaire, animation, téléfilm —
+  genres de Radarr/Sonarr), mauvaise note 15 (IMDb pour un film, TVDB pour une série), éloignement des goûts du
+  profil demandeur 10, score du compte demandeur 10, taille 5.
+- **Un profil** est un compte × type d'appareil, lu dans `startup.log`, `auth.log` et `player.log` ; une demande
+  est rattachée à l'appareil actif dans la demi-heure (`deviceAround`). Les goûts d'un profil sont les genres de ce
+  qu'il ouvre ; à moins de cinq titres, ceux du compte entier.
+- **Le score d'un compte** (`accountScore`, sur 100) : regarde ce qu'il demande 40, note de ses demandes 20, place
+  prise par ce qu'il n'a jamais ouvert 15, pas de rafales (cinq demandes ou plus le même jour) 10, peu de types
+  d'appareils 10, volume sur 90 jours 5.
+
+**La suppression** (`plan.ts`, `execute.ts`). Les fichiers de la bibliothèque sont des liens physiques de ceux que
+qBittorrent partage, cross-seeds compris : supprimer dans Radarr/Sonarr ne libère rien tant qu'un torrent reste. Le
+plan retrouve les torrents **par inode** (un fichier du torrent est le même fichier qu'un fichier du titre), par
+l'historique de Radarr/Sonarr (`downloadId`), et par même nom et même taille. Garde-fous : un torrent dont un fichier
+est lié dans la bibliothèque sous un **autre** titre est gardé et nommé ; un `content_path` vide, racine ou dossier
+de catégorie ne vaut aucun fichier. L'espace attendu compte les inodes dont tous les liens partent. Puis, dans
+l'ordre, chaque étape dans sa garde : qBittorrent (torrents **avec leurs fichiers**), Radarr ou Sonarr
+(`deleteFiles=true`, sans exclusion), Jellyseerr (`DELETE /media/{id}`, les demandes avec), Jellyfin (actualisation),
+les caches ; l'espace rendu est mesuré au disque (`df`, jusqu'à 30 s). Le serveur recalcule le plan sur un disque
+relu et refuse (409) si son empreinte diffère de l'aperçu. Une suppression à la fois. Journal : table
+`tri_removals` et une ligne `[tâche] tri`. Laterna n'efface rien lui-même (le disque est monté en lecture seule).
+
+**Ce qui coûte.** Le parcours du disque (bibliothèque + partages, tous fichiers) prend 15 à 25 s : gardé dix
+minutes, préparé après la collecte, jamais en même temps que les appels aux services — huit `stat` à la fois au plus :
+le pool de libuv (quatre fils) sert aussi au DNS, et en parallèle les appels à qBittorrent et Radarr dépassaient
+leurs 5 s (mesuré le 19/11/2026). La collecte (≈ 15 s) est gardée dix minutes sur `globalThis`.
+
+Tests : `tri.test.ts` (scores, appareils, plan sur un faux disque : cross-seeds, fichier partagé, historique,
+empreinte, dossier de catégorie).

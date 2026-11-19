@@ -118,6 +118,22 @@ export const jellyseerr = {
       `${cfg.url}/api/v1/request?filter=all&requestedBy=${userId}&take=${Math.min(1000, Math.max(1, Math.floor(take)))}&sort=added`,
       { headers: authHeaders(cookie) }
     ),
+  /**
+   * Toutes les demandes, tous comptes et tous états, page par page (le tri, DECISIONS.md §198). Avec
+   * la clé seulement : c'est une lecture d'administrateur.
+   */
+  getAllRequests: async (): Promise<JellyseerrRequest[]> => {
+    const out: JellyseerrRequest[] = [];
+    for (let skip = 0; skip < 20_000; skip += 100) {
+      const page = await fetchJson<{ results: JellyseerrRequest[]; pageInfo: { results: number } }>(
+        `${cfg.url}/api/v1/request?filter=all&take=100&skip=${skip}&sort=added`,
+        { headers }
+      );
+      out.push(...page.results);
+      if (page.results.length < 100 || out.length >= page.pageInfo.results) break;
+    }
+    return out;
+  },
   getUsers: (cookie?: string) =>
     fetchJson<{ results: JellyseerrUser[] }>(
       `${cfg.url}/api/v1/user?take=200&skip=0`,

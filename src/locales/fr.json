@@ -78,7 +78,8 @@
     "backToCinema": "Retour au cinéma",
     "accountPreferences": "Vos préférences sont dans Compte",
     "label": "Navigation de la gestion",
-    "libraryCheck": "Contrôle de la bibliothèque"
+    "libraryCheck": "Contrôle de la bibliothèque",
+    "tri": "Tri"
   },
   "common": {
     "loading": "Chargement...",
@@ -4630,5 +4631,135 @@
       "rejected": "refusé"
     },
     "stale": "fichier changé depuis la mesure"
+  },
+  "tri": {
+    "title": "Tri de la bibliothèque",
+    "subtitle": "Ce qui n'a jamais été ouvert, qui l'a demandé, depuis quoi — et la suppression complète, torrents compris.",
+    "refresh": "Recalculer",
+    "computedAt": "Calculé le {when}",
+    "stat": {
+      "never": "Jamais ouverts",
+      "library": "Bibliothèque",
+      "freed": "Espace rendu par le tri"
+    },
+    "tab": {
+      "titles": "Titres",
+      "accounts": "Comptes",
+      "removed": "Journal"
+    },
+    "neverOpened": "Jamais ouvert",
+    "openedBy": "Ouvert par {n} compte|Ouvert par {n} comptes",
+    "noRequester": "Aucune demande",
+    "flag": {
+      "documentary": "Documentaire",
+      "animationMovie": "Film d'animation",
+      "animationSeries": "Série d'animation",
+      "tvMovie": "Téléfilm",
+      "lowRating": "Mal noté",
+      "farFromProfile": "Loin du profil"
+    },
+    "sort": {
+      "score": "Tri : à examiner d'abord",
+      "size": "Tri : les plus lourds",
+      "requested": "Tri : demandes les plus anciennes",
+      "rating": "Tri : les plus mal notés",
+      "added": "Tri : ajoutés il y a le plus longtemps"
+    },
+    "filter": {
+      "search": "Chercher un titre",
+      "allKinds": "Films et séries",
+      "movies": "Films",
+      "series": "Séries",
+      "allAccounts": "Tous les comptes",
+      "count": "{n} titre · {size}|{n} titres · {size}",
+      "empty": "Aucun titre ne correspond.",
+      "more": "Afficher plus ({n} restants)"
+    },
+    "reason": {
+      "neverOpened": "Jamais ouvert par personne",
+      "stale": "Plus ouvert depuis six mois",
+      "age": "Ancienneté de la demande ou de l'ajout",
+      "category": "Catégorie signalée",
+      "rating": "Mal noté",
+      "distance": "Loin de ce que regarde le profil demandeur",
+      "requester": "Demandé par un compte au score faible",
+      "size": "Place occupée"
+    },
+    "detail": {
+      "facts": "Le titre",
+      "size": "Taille",
+      "episodes": "Épisodes",
+      "episodesValue": "{files} présents sur {total}",
+      "added": "Ajouté",
+      "rating": "Note",
+      "genres": "Genres",
+      "distance": "Éloignement du profil",
+      "why": "Pourquoi {score}",
+      "requests": "Demandes ({n})",
+      "noRequest": "Aucune demande : ajouté directement.",
+      "deviceUnknown": "appareil inconnu",
+      "viewers": "Vu ou entamé ({n})",
+      "noViewer": "Personne ne l'a vu ni entamé.",
+      "playedEpisodes": "{n} épisode|{n} épisodes",
+      "noDate": "date inconnue",
+      "sessions": "Séances dans Laterna ({n})",
+      "noSession": "Aucune séance au journal.",
+      "minutes": "{n} min regardée|{n} min regardées",
+      "more": "Voir les {n} autres",
+      "less": "Réduire",
+      "removeTitle": "Supprimer"
+    },
+    "remove": {
+      "prepare": "Préparer la suppression…",
+      "planning": "Recherche des fichiers et des torrents…",
+      "retry": "Réessayer",
+      "planTitle": "Tout ce qui partira avec « {title} »",
+      "freed": "Espace rendu (estimé)",
+      "files": "Fichiers de la bibliothèque",
+      "torrents": "Torrents, cross-seeds compris",
+      "step": {
+        "qbit": "qBittorrent : {n} torrent retiré avec ses fichiers|qBittorrent : {n} torrents retirés avec leurs fichiers",
+        "radarr": "Radarr : le film et ses fichiers",
+        "sonarr": "Sonarr : la série et ses fichiers",
+        "jellyseerr": "Jellyseerr : le média et ses demandes",
+        "jellyfin": "Jellyfin : actualisation de la bibliothèque"
+      },
+      "why": {
+        "shared": "même fichier",
+        "history": "téléchargé pour ce titre",
+        "same": "même contenu"
+      },
+      "skipped": "{n} torrent gardé : un de ses fichiers sert aussi à un autre titre|{n} torrents gardés : leurs fichiers servent aussi à un autre titre",
+      "showFiles": "Voir les fichiers ({n})",
+      "confirm": "Oui, tout supprimer",
+      "cancel": "Annuler",
+      "removing": "Suppression…",
+      "wait": "Jusqu'à une minute : l'espace est mesuré sur le disque.",
+      "done": "« {title} » supprimé · {freed} rendus"
+    },
+    "account": {
+      "summary": "{requests} demandes · {opened} ouverts sur {available} présents ({pct} %)",
+      "neverOpenedSize": "jamais ouvert",
+      "parts": "Le score",
+      "facts": "{last90} demandes en 90 jours · {burst} % en rafales · {devices} types d'appareils",
+      "profiles": "Profils ({n})",
+      "noProfile": "Aucune séance au journal.",
+      "openedTitles": "{n} titre ouvert|{n} titres ouverts",
+      "showRequests": "Voir ses demandes"
+    },
+    "part": {
+      "openRate": "Regarde ce qu'il demande",
+      "rating": "Note de ses demandes",
+      "space": "Place prise par l'inutilisé",
+      "bursts": "Pas de rafales",
+      "sharing": "Peu de partage de compte",
+      "volume": "Volume raisonnable"
+    },
+    "log": {
+      "empty": "Rien n'a encore été supprimé par le tri.",
+      "failed": "étape en échec",
+      "torrents": "{n} torrent|{n} torrents",
+      "requestedBy": "demandé par {who}"
+    }
   }
 }

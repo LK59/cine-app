@@ -1,30 +1,4 @@
-import {
-  LayoutDashboard,
-  Film,
-  Tv,
-  Captions,
-  Search,
-  Download,
-  PlayCircle,
-  ListChecks,
-  CalendarDays,
-  BarChart2,
-  PackageCheck,
-  Activity,
-  PlugZap,
-  Clapperboard,
-  Cast,
-  BookOpen,
-  Sparkles,
-  Crop,
-  UserPlus,
-  KeyRound,
-  Container,
-  MessageSquareQuote,
-  ScanSearch,
-  ScanFace,
-  Timer,
-} from "lucide-react";
+import { LayoutDashboard, Film, Tv, Captions, Search, Download, PlayCircle, ListChecks, CalendarDays, BarChart2, PackageCheck, Activity, PlugZap, Clapperboard, Cast, BookOpen, Sparkles, Crop, UserPlus, KeyRound, Container, MessageSquareQuote, ScanSearch, ScanFace, Timer, ListFilter } from "lucide-react";
 import type { ServiceKey } from "@/lib/services";
 
 export interface NavItem {
@@ -82,6 +56,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/timeline", navKey: "nav.timeline", icon: PackageCheck },
       // Où Jellyfin, Radarr/Sonarr, TMDB et le disque se contredisent (DECISIONS.md §90) — lecture seule.
       { href: "/controle", navKey: "nav.libraryCheck", icon: ScanSearch },
+      // Le tri : ce qui n'a jamais été ouvert, qui l'a demandé, et la suppression complète (DECISIONS.md §198).
+      { href: "/tri", navKey: "nav.tri", icon: ListFilter },
     ],
   },
   {

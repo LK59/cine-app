@@ -90,6 +90,13 @@ function migrate(db: Database.Database): void {
       value TEXT NOT NULL
     );
 
+    -- Le tri de la bibliothèque (DECISIONS.md §198) : ce qu'il a supprimé, quand, et l'espace rendu.
+    CREATE TABLE IF NOT EXISTS tri_removals (
+      id    INTEGER PRIMARY KEY AUTOINCREMENT,
+      at    INTEGER NOT NULL,
+      entry TEXT NOT NULL
+    );
+
     -- Les titres vus d'un compte (DECISIONS.md §51, 06/10/2026). Une copie tenue à jour de ce que
     -- Jellyfin sait pour les titres qu'il possède, et la seule trace pour ceux qu'il n'a pas (vus
     -- ailleurs, ou partis de la bibliothèque) : le « vu » d'un compte ne se perd plus. Ce n'est pas

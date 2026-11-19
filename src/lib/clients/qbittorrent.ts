@@ -143,6 +143,8 @@ export interface QbTorrent {
   uploaded: number;
   downloaded: number;
   content_path: string;
+  /** Le dossier d'enregistrement (vu de qBittorrent) — `content_path` est dessous. */
+  save_path?: string;
   num_seeds: number;
   num_leechs: number;
 }
