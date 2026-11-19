@@ -1,10 +1,12 @@
 name: Build and publish Docker image
 
 # Deux canaux (19/11/2026) :
-# - un push sur main publie `:edge` et `:<commit>` — le travail du jour, pour qui veut le suivre ;
-# - une release publiée sur GitHub publie `:X.Y.Z`, `:X.Y`, `:stable` et `:latest`. `latest` n'est donc
-#   plus « le dernier commit » mais la dernière version annoncée : c'est ce qu'un compose collé tel quel
-#   doit tirer. Les releases s'espacent ; la production de la maison, construite sur place, n'en dépend pas.
+# - un push sur main publie `:edge` et `:<commit>` — le travail du jour, pour qui veut le suivre ; x86-64
+#   seulement ;
+# - une release publiée sur GitHub publie `:X.Y.Z`, `:X.Y`, `:stable` et `:latest`, en x86-64 ET en ARM64
+#   (20/11/2026, ARM expérimental). `latest` n'est donc plus « le dernier commit » mais la dernière version
+#   annoncée : c'est ce qu'un compose collé tel quel doit tirer. Les releases s'espacent ; la production de
+#   la maison, construite sur place, n'en dépend pas.
 # Chaque image paraît sous deux noms : ghcr.io/lk59/laterna, et ghcr.io/lk59/cine-app, l'ancien, gardé
 # pour toujours (les installations existantes le tirent).
 on:
@@ -23,14 +25,15 @@ jobs:
   verify:
     uses: ./.github/workflows/verify.yml
 
-  build-and-push:
+  # ── main → :edge (x86-64) ────────────────────────────────────────────────────────────────────────
+  edge:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     # Nothing is published unless the Verify workflow's checks pass on this same commit.
     needs: verify
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -46,44 +49,22 @@ jobs:
           buildkitd-config-inline: |
             [registry."docker.io"]
               mirrors = ["mirror.gcr.io"]
-
       - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      # The tests already ran in the `verify` job this one `needs`, on this same commit: the build skips
-      # them (`SKIP_TESTS=1`, see Dockerfile) instead of running the whole suite a second time.
       - name: Short commit ref
         id: ref
         run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-      # Les étiquettes selon le canal : edge + commit sur main, version + stable + latest sur une release.
-      - name: Image tags
-        id: tags
-        env:
-          EVENT: ${{ github.event_name }}
-          TAG: ${{ github.event.release.tag_name }}
-        run: |
-          set -eu
-          if [ "$EVENT" = "release" ]; then
-            v="${TAG#v}"
-            case "$v" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "étiquette de release inattendue : $TAG" >&2; exit 1 ;; esac
-            names="$v ${v%.*} stable latest $GITHUB_SHA"
-          else
-            names="edge $GITHUB_SHA"
-          fi
-          {
-            echo "list<<EOF"
-            for n in $names; do echo "ghcr.io/lk59/laterna:$n"; echo "ghcr.io/lk59/cine-app:$n"; done
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
+      # The tests already ran in the `verify` job this one `needs`, on this same commit: the build skips
+      # them (`SKIP_TESTS=1`, see Dockerfile) instead of running the whole suite a second time.
       - name: Build and push
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: .
+          platforms: linux/amd64
           push: true
           # The commit the image was built from, shown in the settings page (and naming the
           # service worker's cache generation) — without it the published image showed a
@@ -91,9 +72,140 @@ jobs:
           build-args: |
             BUILD_REF=${{ steps.ref.outputs.short }}
             SKIP_TESTS=1
-          tags: ${{ steps.tags.outputs.list }}
+          tags: |
+            ghcr.io/lk59/laterna:edge
+            ghcr.io/lk59/laterna:${{ github.sha }}
+            ghcr.io/lk59/cine-app:edge
+            ghcr.io/lk59/cine-app:${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/LK59/laterna
             org.opencontainers.image.title=Laterna
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,mode=max,scope=amd64
+
+  # ── release → :X.Y.Z, :X.Y, :stable, :latest (x86-64 + ARM64) ────────────────────────────────────
+  # Each architecture is built on a machine of its own kind (GitHub's ARM runners: no emulation, the
+  # native modules — better-sqlite3 — compile as they would on a Raspberry Pi), pushed by digest only,
+  # then started and asked for /api/ping before anything is tagged. The merge job tags the pair.
+  release-build:
+    if: github.event_name == 'release'
+    needs: verify
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Short commit ref
+        id: ref
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            BUILD_REF=${{ steps.ref.outputs.short }}
+            SKIP_TESTS=1
+          labels: |
+            org.opencontainers.image.source=https://github.com/LK59/laterna
+            org.opencontainers.image.title=Laterna
+          outputs: type=image,name=ghcr.io/lk59/laterna,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+      # The image must start and answer before it can be tagged: a throwaway container, a throwaway
+      # volume, the health route. On the ARM runner this is the only proof the ARM image runs at all.
+      - name: Start and ping
+        env:
+          IMAGE: ghcr.io/lk59/laterna@${{ steps.build.outputs.digest }}
+        run: |
+          set -eu
+          docker run -d --name smoke -p 127.0.0.1:3000:3000 "$IMAGE"
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/ping >/dev/null 2>&1; then
+              echo "answers after ${i}×2 s on $(docker exec smoke uname -m)"; docker logs smoke 2>&1 | head -5; exit 0
+            fi
+            sleep 2
+          done
+          echo "the image did not answer within two minutes" >&2
+          docker logs smoke >&2
+          exit 1
+      - name: Keep the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+      - name: Upload the digest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  release-tags:
+    if: github.event_name == 'release'
+    needs: release-build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download the digests
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # One multi-architecture list per tag, under both names; Docker picks the right image itself.
+      - name: Tag the pair
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        working-directory: /tmp/digests
+        run: |
+          set -eu
+          v="${TAG#v}"
+          case "$v" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "étiquette de release inattendue : $TAG" >&2; exit 1 ;; esac
+          sources=""
+          for d in *; do sources="$sources ghcr.io/lk59/laterna@sha256:$d"; done
+          tags=""
+          for n in "$v" "${v%.*}" stable latest "$GITHUB_SHA"; do
+            tags="$tags -t ghcr.io/lk59/laterna:$n -t ghcr.io/lk59/cine-app:$n"
+          done
+          # shellcheck disable=SC2086
+          docker buildx imagetools create $tags $sources
+          docker buildx imagetools inspect "ghcr.io/lk59/laterna:$v"

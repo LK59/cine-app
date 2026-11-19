@@ -13,8 +13,10 @@ One compose file, one container, then everything is set in the browser.
 [Appendix: the advanced deployment](#appendix-the-advanced-deployment) ·
 [Uninstalling](#uninstalling) · Every variable: [ENV.md](ENV.md)
 
-**What you need:** a Linux **x86-64 (amd64)** host with Docker Engine and the Compose plugin
-(`docker compose version` answers) — there is no ARM image (Raspberry Pi, Ampere) yet —, a running
+**What you need:** a Linux host with Docker Engine and the Compose plugin (`docker compose version`
+answers), **x86-64 (amd64)** or **ARM64** (experimental: Raspberry Pi 4/5, Ampere… — the image is built
+and started on ARM for every release, but has not run long on real ARM hardware; `laterna-xray` is
+x86-64 only), a running
 Jellyfin and a free [TMDB](https://www.themoviedb.org/settings/api) API key.
 Radarr and Sonarr are optional: without them the cinema shows everything Jellyfin has; with them you
 also get management (additions, downloads, requests, missing episodes, the library check). Jellyseerr
@@ -24,7 +26,7 @@ repository, install Node, or write an `.env` file.
 | | |
 |---|---|
 | **Image** | `ghcr.io/lk59/laterna:latest`, public — the same image is also published under its former name, `ghcr.io/lk59/cine-app`. `latest` and `stable` are the latest [release](https://github.com/LK59/laterna/releases); each release also has its number (`:10.65.1`, `:10.65`) to pin or roll back; `edge` follows the code day to day |
-| **Architecture** | `linux/amd64` |
+| **Architecture** | `linux/amd64`; releases also `linux/arm64` (experimental) under the same tags — Docker picks the right one. `:edge` is `linux/amd64` only |
 | **Listens on** | port `3000` inside the container, plain HTTP |
 | **Runs as** | uid `1001`, gid `1001`, not root |
 | **Keeps its state in** | `/app/data`: SQLite database and its daily backups, settings, generated secrets, logs, image cache, generated subtitles, report screenshots, copies prepared for offline downloads |
@@ -457,7 +459,7 @@ Without it, nothing changes: every feature that relies on it is off by default (
 anywhere until an address **and** a key are set. With it, the player shows who is on screen, scene by
 scene, and who is speaking.
 
-**What it needs**: Docker, the Docker network Laterna is on, the media library (read-only), ~4 GB of
+**What it needs**: an **x86-64** host (no ARM build: recognition runs on Intel's OpenVINO), Docker, the Docker network Laterna is on, the media library (read-only), ~4 GB of
 memory (8 GB if inference runs on an Intel iGPU), a few GB of disk for its database. An Intel iGPU
 is optional and makes it about twice as fast. It calls no online AI service.
 

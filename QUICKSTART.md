@@ -5,8 +5,9 @@ From an empty folder to a working cinema in about ten minutes. This page is enou
 
 ## What you need
 
-- A Linux **x86-64 (amd64)** host with **Docker Engine and the Compose plugin** (`docker compose
-  version` answers) — there is no ARM image (Raspberry Pi, Ampere) yet.
+- A Linux host with **Docker Engine and the Compose plugin** (`docker compose version` answers):
+  **x86-64 (amd64)**, or **ARM64** (Raspberry Pi 4/5, Ampere…) — *experimental*, see below. Actors on
+  screen (`laterna-xray`) is x86-64 only.
 - A running **Jellyfin**, with an API key (*Jellyfin → Dashboard → API Keys → +*). Every viewer
   signs in with their own Jellyfin account.
 - A free **TMDB** API key (*themoviedb.org → Settings → API*), for posters and synopses.
@@ -17,6 +18,15 @@ From an empty folder to a working cinema in about ten minutes. This page is enou
 
 No repository to clone, no Node, no `.env` file: secrets are generated on first launch and every
 setting is made in the browser.
+
+### ARM64 (experimental)
+
+Releases (`:latest`, `:stable`, `:10.65.3`…) are published for **x86-64 and ARM64** under the same
+names: Docker pulls the right one by itself. The ARM image is built on an ARM machine and started for
+every release, but it has not yet run long on real ARM hardware — tell us how it goes in
+[Discussions](https://github.com/LK59/laterna/discussions). `:edge` (the code of the day) is x86-64
+only. On a Raspberry Pi, Laterna itself is light (each viewer's device decodes the film), but Jellyfin
+beside it transcodes slowly. Actors on screen (`laterna-xray`) does not run on ARM.
 
 ## 1. The compose file
 
@@ -260,8 +270,9 @@ to a face. During playback, the **On screen** row shows who is in the scene; tou
 their role, « So far » (what their character has done up to now, without spoilers) and their films in
 your library. It all runs on your own server, with no online AI.
 
-It needs about 4 GB of memory, the media library read-only and Laterna's Docker network. An Intel iGPU
-is optional and makes it about twice as fast. In a folder of its own:
+It needs an **x86-64** host (there is no ARM build: its recognition runs on Intel's OpenVINO), about
+4 GB of memory, the media library read-only and Laterna's Docker network. An Intel iGPU is optional and
+makes it about twice as fast. In a folder of its own:
 
 ```yaml
 services:

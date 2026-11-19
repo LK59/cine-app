@@ -214,8 +214,9 @@ for that style of deployment.
 
 ### What you need
 
-- A Linux **x86-64 (amd64)** host with **Docker Engine and the Compose plugin** — there is no ARM
-  image (Raspberry Pi, Ampere) yet.
+- A Linux host with **Docker Engine and the Compose plugin**: **x86-64 (amd64)**, or **ARM64** —
+  Raspberry Pi 4/5, Ampere… — *experimental*: the image is built and started on ARM for every release,
+  but has not been run long on real ARM hardware yet. Actors on screen (`laterna-xray`) is x86-64 only.
 - A running **Jellyfin** with an API key. Every viewer signs in with their own Jellyfin account, and
   Jellyfin administrators are Laterna administrators.
 - A free **TMDB** API key, for posters and synopses.

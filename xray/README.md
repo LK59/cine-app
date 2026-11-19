@@ -137,7 +137,7 @@ dans [docs/PIPELINE.md](docs/PIPELINE.md) ; « Journaux et rapport d'analyse » 
 
 ## Installation
 
-Il faut Docker, le réseau Docker où vit Laterna (par exemple `media_net`), et la médiathèque.
+Il faut un hôte **x86-64** — l'image n'existe pas en ARM : la reconnaissance tourne sur OpenVINO d'Intel, et Laterna lui-même, publié aussi en ARM64 (expérimental), s'en passe très bien —, Docker, le réseau Docker où vit Laterna (par exemple `media_net`), et la médiathèque.
 
 1. Récupérer [`docker-compose.example.yml`](docker-compose.example.yml) et le copier en
    `docker-compose.yml` dans un dossier à part.
