@@ -14,7 +14,7 @@ server — in one container.
 [![Build and publish](https://github.com/LK59/laterna/actions/workflows/docker.yml/badge.svg?branch=main)](https://github.com/LK59/laterna/actions/workflows/docker.yml)
 [![Image](https://img.shields.io/badge/image-ghcr.io%2Flk59%2Fcine--app-2496ED?logo=docker&logoColor=white)](https://github.com/LK59/laterna/pkgs/container/cine-app)
 
-[Website](https://laterna.fr) · [Quick start](QUICKSTART.md) · [Features](docs/FEATURES.md) · [Docs](#documentation)
+[Website](https://laterna.fr) · [Quick start](#install) · [Features](docs/FEATURES.md) · [Docs](#documentation)
 
 </div>
 
@@ -128,13 +128,65 @@ Laterna does not replace Jellyfin: it needs it, and builds on its accounts, libr
 | **Music, live TV, photos** | No — films and series, optionally books | Yes | No |
 | **Library scanning, metadata, user accounts** | Jellyfin's | Yes — it is the server | Jellyfin's accounts |
 
-## Install in three commands
+## Install
+
+Paste this `docker-compose.yml` into an empty folder — or into Portainer, Dockge, Komodo or any
+« add stack » screen — then start it. It works as is; the commented lines are the options most
+installs end up using.
+
+```yaml
+# Laterna — works as is. Every option: https://github.com/LK59/laterna/blob/main/DEPLOYMENT.md
+services:
+  cine-app:
+    image: ghcr.io/lk59/cine-app:latest
+    container_name: cine-app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"     # this server only; a reverse proxy serves the rest
+    # networks: [proxy]           # the Docker network of your proxy (and Jellyfin): see the end
+    volumes:
+      - cine-data:/app/data       # database, settings, generated secrets, logs
+      # - /path/to/media:/mnt/media/video:ro   # optional, read-only: storage statistics
+    environment:
+      - TZ=Etc/UTC                # your time zone, e.g. Europe/Paris
+      # - COOKIE_SECURE=true                    # behind HTTPS
+      # - TRUSTED_PROXIES=nginx-proxy-manager   # your proxy's container name
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/ping"]
+      interval: 30s
+      start_period: 60s
+
+volumes:
+  cine-data:
+    name: cine-app-data
+
+# networks:
+#   proxy:
+#     external: true              # an existing network: `docker network ls`
+```
 
 ```bash
-mkdir cine-app && cd cine-app
-curl -o docker-compose.yml https://raw.githubusercontent.com/LK59/laterna/main/docker-compose.example.yml
+docker compose up -d
+docker compose logs cine-app | grep "setup code"
+```
+
+> **Every deployment option** is in the **[deployment guide](DEPLOYMENT.md)**: reverse proxy
+> (Nginx Proxy Manager, Caddy, Traefik), data in a folder, media, `.env`, updates and backups — and
+> **[actors on screen](DEPLOYMENT.md#optional-actors-on-screen-laterna-xray)**, the optional
+> `laterna-xray` service that recognises the cast scene by scene.
+
+<details>
+<summary>Or in one go, over SSH on the server</summary>
+
+```bash
+mkdir laterna && cd laterna
+curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/LK59/laterna/main/docker-compose.example.yml
 docker compose up -d
 ```
+
+This fetches [`docker-compose.example.yml`](docker-compose.example.yml), the same file with a
+comment on every line.
+</details>
 
 Then open `http://localhost:3000` on the server (or through an SSH tunnel): the example publishes
 port 3000 on the server's loopback only. The setup assistant asks for the one-time setup code

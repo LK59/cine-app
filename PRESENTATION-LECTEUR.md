@@ -9,7 +9,7 @@ multicanal compris, sans que le serveur réencode quoi que ce soit.**
 | 🎬 **0 transcodage serveur** | dans le cas courant : le serveur envoie des octets, l'appareil fait le reste |
 | 🔊 **10 familles audio** | lues sur l'appareil, copiées telles quelles ou décodées sur place — AAC, Dolby Digital, Dolby Digital Plus, Dolby TrueHD, MLP, DTS, DTS-HD, DTS Express, FLAC, Opus |
 | 📱 **4K HDR10 et Dolby Vision** | sur iPhone, iPad et Mac, en natif, sans conversion de l'image |
-| 🧪 **7 156 tests automatisés** | dans le dépôt, plus des bancs de mesure qui passent de vrais films au crible |
+| 🧪 **8 700 tests automatisés** | dans le dépôt, plus des bancs de mesure qui passent de vrais films au crible |
 
 Environ **39 000 lignes de TypeScript** pour le lecteur seul (dont 17 000 pour le moteur de
 remultiplexage et d'audio), et **cinq décodeurs audio** compilés en WebAssembly, chargés seulement
@@ -296,7 +296,7 @@ Désactivé sans clé d'accès ; un budget mensuel et une limite quotidienne par
 
 | | |
 |---|---|
-| **Tests** | 7 156 tests automatisés dans 750 fichiers, lancés avant chaque déploiement et à chaque publication |
+| **Tests** | 8 703 tests automatisés dans 902 fichiers, lancés avant chaque déploiement et à chaque publication |
 | **Bancs sur vrais fichiers** | quatorze bancs, hors de la suite : octets produits relus par `ffmpeg`, coût de chaque étape, niveau de chaque canal comparé à `ffmpeg`, recensement des formats d'une bibliothèque entière |
 | **Banc d'appareil** | lancé depuis le cinéma, il lit de vrais films sur l'appareil à tester : ouverture, sauts, rafales de sauts, pause, changement de piste, sous-titres — et mesure l'horloge du film contre les images affichées |
 | **Journal de lecture** | chaque appareil dit ce qu'il a fait : chemin pris, relais, attentes et leur cause (réseau, calcul ou décodeur), débit reçu, deux dernières minutes de lecture |

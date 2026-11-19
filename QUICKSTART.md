@@ -95,8 +95,8 @@ volumes:
 Or download it:
 
 ```bash
-mkdir cine-app && cd cine-app
-curl -o docker-compose.yml https://raw.githubusercontent.com/LK59/laterna/main/docker-compose.example.yml
+mkdir laterna && cd laterna
+curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/LK59/laterna/main/docker-compose.example.yml
 ```
 
 As it stands, it works: port 3000 on the server's loopback only, a named volume, UTC. What you may
@@ -236,8 +236,55 @@ With a `./data` folder, archive that folder instead. Keep `config/secrets.json` 
 it everyone is signed out and notifications must be turned on again. Restoring is in
 [DEPLOYMENT.md, step 6](DEPLOYMENT.md#6-updates-and-backups).
 
+## Bonus: actors on screen (X-Ray)
+
+The optional companion service `laterna-xray` recognises the cast scene by scene and ties each voice
+to a face. During playback, the **On screen** row shows who is in the scene; touching someone opens
+their role, « So far » (what their character has done up to now, without spoilers) and their films in
+your library. It all runs on your own server, with no online AI.
+
+It needs about 4 GB of memory, the media library read-only and Laterna's Docker network. An Intel iGPU
+is optional and makes it about twice as fast. In a folder of its own:
+
+```yaml
+services:
+  laterna-xray:
+    image: ghcr.io/lk59/laterna-xray:latest
+    container_name: laterna-xray
+    restart: unless-stopped
+    user: "1000:1000"                 # the owner of your media files
+    environment:
+      - XRAY_API_KEY=change-me        # openssl rand -hex 32 — the same key in Laterna
+      - HOME=/data
+    networks: [proxy]                 # Laterna's Docker network
+    volumes:
+      - /path/to/media:/media:ro   # read-only, at the same path as in Jellyfin
+      - xray_data:/data
+    mem_limit: 4g
+    cpu_shares: 256                   # a Jellyfin transcode goes first
+    # devices: ["/dev/dri:/dev/dri"]  # Intel iGPU, optional: twice as fast
+    # group_add: ["993"]              # the group of /dev/dri: getent group render
+
+volumes:
+  xray_data:
+
+networks:
+  proxy:
+    external: true
+```
+
+1. `docker compose up -d`, then `docker logs -f laterna-xray` until the models are reported ready — the
+   first start downloads and checks them, a few minutes, once.
+2. In Laterna, **Configuration → Connections → Actors on screen**: address `http://laterna-xray:8000`
+   and the same key, then *Test connection*.
+3. **Configuration → Smart features → Actors on screen**: open it to administrators first, then to
+   everyone. The library is analysed in the background, at low priority; progress is on that page.
+
+Hardware acceleration, models and licences, settings and troubleshooting:
+[DEPLOYMENT.md](DEPLOYMENT.md#optional-actors-on-screen-laterna-xray) and [xray/README.md](xray/README.md).
+
 ## Going further
 
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** — the full guide: each line of the compose file, the reverse
-  proxy (Traefik included), every screen and setting, backups, troubleshooting, file permissions.
+  proxy (Traefik included), actors on screen (X-Ray), every screen and setting, backups, troubleshooting, file permissions.
 - **[ENV.md](ENV.md)** — every variable, its default, and which value wins.
