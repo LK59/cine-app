@@ -20,6 +20,7 @@
 // reconstruction le retrouve, la fermeture du lecteur rend sa mémoire. Il ne s'accumule donc jamais.
 import { TrueHdCore, type DecodedBatch } from "./truehdCore";
 import { Ac3DtsCore, type Ac3DtsCodec } from "../ac3dts/ac3dtsCore";
+import { noteLumenWorker } from "../lumenFacts";
 
 export type { DecodedBatch };
 
@@ -55,6 +56,7 @@ export function yieldToBrowser(): Promise<void> {
  * suivi d'un retour au navigateur — aucune tâche ne dépasse quelques millisecondes.
  */
 async function openOnMainThread(kind: Kind, open: OpenSpec, workerRefusal: string): Promise<TrueHdDecoder> {
+  if (kind === "ac3dts") noteLumenWorker("mainThread");
   const core = kind === "truehd" ? await TrueHdCore.create(!!open.mlp) : await Ac3DtsCore.create(open.which as Ac3DtsCodec);
   return {
     async decode(blocks) {
@@ -114,6 +116,8 @@ const lost = (h: Host, error: Error) => new Error(`worker ${LABEL[h.kind]} perdu
 
 function retire(h: Host, error: Error): void {
   if (h.dead) return;
+  // Perdu, et non simplement terminé faute de décodeur ouvert (`releaseIfIdle`).
+  if (h.kind === "ac3dts" && !/terminé$/.test(error.message)) noteLumenWorker("lost");
   h.dead = error;
   if (h.idle) clearTimeout(h.idle);
   h.idle = null;
@@ -160,6 +164,7 @@ export function absoluteHref(url: { href: string }): string {
 }
 
 function createHost(kind: Kind): Host {
+  if (kind === "ac3dts") noteLumenWorker("created");
   // Les deux fichiers sont copiés tels quels par le build ; le module WebAssembly est donné au worker
   // par son adresse, qu'un import relatif ne retrouverait pas sous le nom haché de la copie.
   const workerUrl = new URL("./truehdWorker.mjs", import.meta.url);

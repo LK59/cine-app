@@ -4,6 +4,7 @@ import path from "node:path";
 import { LOG_DIR, appendJsonLine, logGenerations } from "@/lib/logFile";
 import { XRAY_USAGE_VALUE } from "@/lib/xrayUsage";
 import { REPLAY_USAGE_VALUE } from "@/lib/replaySubtitles";
+import { LUMEN_DEC_VALUE } from "@/lib/webcodecs/lumenFacts";
 
 /**
  * What actually happened during playback, for everybody, written to a file.
@@ -281,7 +282,8 @@ export function logPlaybackEvent(
   // bilan déjà plein — sous le plafond, elle aurait été la première à tomber.
   // `xray` de même (11/11/2026, `xrayUsage.ts`) : trois compteurs courts, l'usage des acteurs à l'écran.
   // `replaySubs` de même (13/11/2026, `replaySubtitles.ts`, §150) : les sous-titres d'un passage rejoué.
-  const { build, version, resent, lateByMs, sleepTimer, sceneRestart, xray, replaySubs, ...rest } = fields;
+  // `lumenDec` de même (19/11/2026, `lumenFacts.ts`, §197) : les décodeurs du son ouverts et fermés.
+  const { build, version, resent, lateByMs, sleepTimer, sceneRestart, xray, replaySubs, lumenDec, ...rest } = fields;
   const late = typeof lateByMs === "number" && Number.isFinite(lateByMs) && lateByMs >= 0 && lateByMs <= MAX_LATE_MS ? Math.round(lateByMs) : null;
   const head = {
     ...server,
@@ -293,6 +295,7 @@ export function logPlaybackEvent(
     ...(typeof sceneRestart === "string" && SCENE_RESTART_VALUE.test(sceneRestart) ? { sceneRestart } : {}),
     ...(typeof xray === "string" && XRAY_USAGE_VALUE.test(xray) ? { xray } : {}),
     ...(typeof replaySubs === "string" && REPLAY_USAGE_VALUE.test(replaySubs) ? { replaySubs } : {}),
+    ...(typeof lumenDec === "string" && LUMEN_DEC_VALUE.test(lumenDec) ? { lumenDec } : {}),
   };
   // Lu à l'appel : un test bascule `NODE_ENV` sans recharger le module.
   const dev = process.env.NODE_ENV === "development";

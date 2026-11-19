@@ -32,6 +32,7 @@
 import type { ByteSource } from "./byteSource";
 import { clusterOffsetForTime, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { createSampleReader } from "./mediaFile";
+import { noteLumenDecoderClosed, noteLumenDecoderOpened } from "./lumenFacts";
 
 /** Un paquet audio de la piste, aux instants que mediabunny lui donnerait (en secondes). */
 export interface DemuxedAudioPacket {
@@ -249,6 +250,7 @@ export async function* decodedFrom(
   const decoder = await openDecoder(onFrame, (error) => {
     failure ??= { error };
   });
+  noteLumenDecoderOpened();
   try {
     for await (const packet of packets) {
       await decoder.decode(packet);
@@ -262,5 +264,6 @@ export async function* decodedFrom(
     while (ready.length > 0) yield ready.shift()!;
   } finally {
     decoder.close();
+    noteLumenDecoderClosed();
   }
 }
