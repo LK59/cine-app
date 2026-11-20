@@ -378,7 +378,12 @@ class View {
         }
     }
     expand() {
-        const { documentElement } = this.document
+        // Le cadre du chapitre peut être parti (livre fermé, chapitre changé) quand le ResizeObserver
+        // ou `fonts.ready` rappelle : `contentDocument` est alors null et la déstructuration levait
+        // « Cannot destructure property 'documentElement' » (iPhone, hors ligne, 28/10 et 19/11/2026).
+        const doc = this.document
+        if (!doc?.documentElement) return
+        const { documentElement } = doc
         if (this.#column) {
             const side = this.#vertical ? 'height' : 'width'
             const otherSide = this.#vertical ? 'width' : 'height'

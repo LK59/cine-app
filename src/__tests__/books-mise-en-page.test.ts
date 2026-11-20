@@ -107,3 +107,15 @@ describe("une copie par livre — sous-titres génériques et pluriels (Stephen 
     expect(king("Bazaar: roman")).not.toBe(duplicateKey({ name: "Bazaar", authors: ["Autre"] }));
   });
 });
+
+// Le ResizeObserver et `fonts.ready` rappellent `expand()` après le départ du cadre du chapitre (livre fermé,
+// chapitre changé) : `contentDocument` est null. Sans garde, « Cannot destructure property 'documentElement' »
+// partait à `window.onerror` (iPhone, hors ligne, 28/10 et 19/11/2026).
+describe("le paginateur après le départ du chapitre", () => {
+  it("`expand()` ne lit rien d'un document absent", () => {
+    const src = read("src/lib/books/foliate/paginator.js");
+    const body = src.slice(src.indexOf("    expand() {"), src.indexOf("    expand() {") + 600);
+    expect(body).toMatch(/if \(!doc\?\.documentElement\) return/);
+    expect(body.indexOf("if (!doc?.documentElement) return")).toBeLessThan(body.indexOf("const { documentElement }"));
+  });
+});
