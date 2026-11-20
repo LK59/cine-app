@@ -1569,6 +1569,18 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
         de: "Die Rollen der Schauspieler (Stimme, ohne Nennung, als sie selbst …) werden in Ihrer Sprache angezeigt.",
       },
     ],
+  },  {
+    version: "10.65.3",
+    page: "10.60",
+    group: { fr: "Séries", en: "Series", es: "Series", de: "Serien" },
+    items: [
+      {
+        fr: "Quand un fichier contient plusieurs épisodes, la liste affiche « 1–4 » et un titre par ligne, au lieu de « 1, 5, 9… » et des titres collés.",
+        en: "When one file holds several episodes, the list shows “1–4” and one title per line, instead of “1, 5, 9…” and titles run together.",
+        es: "Cuando un archivo contiene varios episodios, la lista muestra «1–4» y un título por línea, en lugar de «1, 5, 9…» y títulos pegados.",
+        de: "Enthält eine Datei mehrere Folgen, zeigt die Liste „1–4“ und einen Titel pro Zeile statt „1, 5, 9 …“ und aneinanderklebender Titel.",
+      },
+    ],
   },
 ];
 

@@ -475,6 +475,7 @@ Lists, discovery and recommendations are Cinema's: Management has no watchlist o
 -->
 
 - **Stream Deck plugin** — what is playing right now, on the keys of a Stream Deck (see below)
+- **Sign-in screen background**: an image of your choice behind the sign-in and share-code pages, with an adjustable dark overlay (*Configuration → Administration*). Those pages are public, so pick an image with nothing private in it; without one, they stay black
 - Installable PWA, Web Push including iOS Safari / Apple Web Push
 - Four interface languages — French, English, Spanish, German, the video player included
 - Mobile-first navigation with haptic feedback (Android/Chromium only)
