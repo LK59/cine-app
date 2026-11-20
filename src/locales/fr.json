@@ -4217,6 +4217,22 @@
     },
     "loginLink": "Vous venez de l'ancienne adresse ? Code de passage"
   },
+  "loginBackground": {
+    "title": "Écran de connexion",
+    "hint": "Une image de fond pour la page de connexion et celle du code de partage. Sans image, l'écran reste noir.",
+    "none": "Aucune image : fond noir",
+    "previewAlt": "Aperçu de l'écran de connexion",
+    "dim": "Voile sombre",
+    "choose": "Choisir une image",
+    "replace": "Remplacer l'image",
+    "remove": "Retirer",
+    "limits": "JPEG, PNG ou WebP, 9,5 Mo au plus. L'image est visible sans être connecté : n'y mettez rien de privé.",
+    "saved": "Image enregistrée",
+    "removed": "Image retirée, l'écran redevient noir",
+    "tooLarge": "Image trop lourde (9,5 Mo au plus)",
+    "notImage": "Ce fichier n'est pas une image lisible (JPEG, PNG ou WebP)",
+    "error": "L'enregistrement a échoué"
+  },
   "streamdeck": {
     "title": "Stream Deck",
     "hint": "Un jeton par Stream Deck : il ne sert qu'à suivre les lectures en cours, rien d'autre. À saisir dans le plugin avec l'adresse ci-dessous.",

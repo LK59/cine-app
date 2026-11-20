@@ -1,5 +1,6 @@
 "use client";
 
+import { LoginBackdrop } from "@/components/login/LoginBackdrop";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
@@ -76,9 +77,10 @@ export function ShareRedeemForm({ code: fixedCode, household }: { code: string |
   return (
     <main
       ref={rootRef}
-      className="setup-liquid relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ink px-5 py-10"
+      className="setup-liquid relative isolate flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ink px-5 py-10"
       style={{ paddingBottom: "max(2.5rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))" }}
     >
+      <LoginBackdrop />
       <div className="relative w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           {/* eslint-disable-next-line @next/next/no-img-element -- l’icône de l’application, servie sans session (ACTIFS_PUBLICS), comme sur la page de connexion */}

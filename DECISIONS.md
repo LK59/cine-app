@@ -12497,3 +12497,26 @@ leurs 5 s (mesuré le 19/11/2026). La collecte (≈ 15 s) est gardée dix minute
 
 Tests : `tri.test.ts` (scores, appareils, plan sur un faux disque : cross-seeds, fichier partagé, historique,
 empreinte, dossier de catégorie).
+
+## 199. L'image de fond des écrans de connexion : une image que l'administrateur envoie, jamais la bibliothèque (20/11/2026)
+
+**La règle.** La page de connexion et celle du code de partage peuvent porter une image de fond, choisie et
+envoyée par l'administrateur (Configuration → Administration → Écran de connexion). Sans image, elles restent
+noires (le choix du 10/10/2026). Un voile sombre réglable (20 à 85 %, 55 par défaut) garde la carte lisible.
+
+**Pas de mur d'affiches tiré de la bibliothèque**, la variante qui vient d'abord à l'esprit : ces pages sont
+publiques. Il montrerait à n'importe qui ce que contient la bibliothèque, titres masqués par les tags bloqués
+compris (§54), et ses dizaines d'images d'un coup ressemblent aux rafales que CrowdSec bannit.
+
+**Où.** `src/lib/loginBackground.ts` (disque : `DATA_DIR/branding/`, WebP de 2 560 px au plus par `sharp`,
+original gardé, `login-bg.json` avec la version et le voile) et `loginBackgroundShared.ts` (type, bornes, côté
+navigateur aussi). La route publique `GET /api/login-background` (`PUBLIC_PATHS`) : `204` sans image, immuable
+sous `?v=<version>`, `304` sur l'ETag. La route `/api/admin/login-background` (administrateur) : envoi en
+formulaire (9,5 Mo au plus, sous les 10 Mo de corps que Next garde pour le proxy), voile, retrait. Les mises en
+page `src/app/login/layout.tsx` et `src/app/partage/layout.tsx` lisent l'image côté serveur et la passent par
+contexte à `LoginBackdrop` : dessinée au premier rendu, sans requête de plus ni noir qui s'éclaire ensuite.
+
+**Ce qui diffère exprès.** La fiche d'un lien de partage ouvert (`ShareTitleView`) ne la montre pas : elle a
+déjà l'image du titre.
+
+Tests : `login-background.test.ts` (traitement, bornes, route publique, route d'administration), `login-backdrop.test.tsx`.

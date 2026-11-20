@@ -4217,6 +4217,22 @@
     },
     "loginLink": "¿Viene de la dirección antigua? Código de paso"
   },
+  "loginBackground": {
+    "title": "Pantalla de inicio de sesión",
+    "hint": "Una imagen de fondo para la página de inicio de sesión y la del código para compartir. Sin imagen, la pantalla sigue en negro.",
+    "none": "Sin imagen: fondo negro",
+    "previewAlt": "Vista previa de la pantalla de inicio de sesión",
+    "dim": "Velo oscuro",
+    "choose": "Elegir una imagen",
+    "replace": "Reemplazar la imagen",
+    "remove": "Quitar",
+    "limits": "JPEG, PNG o WebP, 9,5 MB como máximo. La imagen se ve sin iniciar sesión: no pongas nada privado.",
+    "saved": "Imagen guardada",
+    "removed": "Imagen quitada, la pantalla vuelve a ser negra",
+    "tooLarge": "Imagen demasiado pesada (9,5 MB como máximo)",
+    "notImage": "Este archivo no es una imagen legible (JPEG, PNG o WebP)",
+    "error": "No se pudo guardar"
+  },
   "streamdeck": {
     "title": "Stream Deck",
     "hint": "Un token por Stream Deck: solo sirve para seguir las reproducciones en curso, nada más. Introdúcelo en el plugin con la dirección de abajo.",

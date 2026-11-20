@@ -4217,6 +4217,22 @@
     },
     "loginLink": "Sie kommen von der alten Adresse? Wechselcode"
   },
+  "loginBackground": {
+    "title": "Anmeldebildschirm",
+    "hint": "Ein Hintergrundbild für die Anmeldeseite und die Seite für Freigabecodes. Ohne Bild bleibt der Bildschirm schwarz.",
+    "none": "Kein Bild: schwarzer Hintergrund",
+    "previewAlt": "Vorschau des Anmeldebildschirms",
+    "dim": "Dunkler Schleier",
+    "choose": "Bild auswählen",
+    "replace": "Bild ersetzen",
+    "remove": "Entfernen",
+    "limits": "JPEG, PNG oder WebP, höchstens 9,5 MB. Das Bild ist ohne Anmeldung sichtbar: nichts Privates verwenden.",
+    "saved": "Bild gespeichert",
+    "removed": "Bild entfernt, der Bildschirm ist wieder schwarz",
+    "tooLarge": "Bild zu groß (höchstens 9,5 MB)",
+    "notImage": "Diese Datei ist kein lesbares Bild (JPEG, PNG oder WebP)",
+    "error": "Speichern fehlgeschlagen"
+  },
   "streamdeck": {
     "title": "Stream Deck",
     "hint": "Ein Token pro Stream Deck: Es dient nur dazu, laufende Wiedergaben zu verfolgen, sonst nichts. Geben Sie es mit der Adresse unten im Plugin ein.",

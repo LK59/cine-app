@@ -55,6 +55,8 @@ export const PUBLIC_PATHS = [
   // Lumen serveur archivé (DECISIONS.md §196) : une seule route, qui répond 410 à tout et ne lit rien. Sans session
   // pour qu'un téléviseur (jamais de cookie) ou un onglet déconnecté reçoive ce 410, et non un 401 à chaque adresse.
   "/api/lumen",
+  // L'image de fond des écrans de connexion (DECISIONS §199) : une seule image choisie par l'administrateur.
+  "/api/login-background",
 ] as const;
 
 /** Vrai pour une de ces adresses, et pour tout ce qu'elle contient. */

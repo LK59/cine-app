@@ -1,5 +1,6 @@
 "use client";
 
+import { LoginBackdrop } from "@/components/login/LoginBackdrop";
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -104,11 +105,12 @@ function LoginForm() {
   return (
     <main
       ref={rootRef}
-      className="setup-liquid relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ink px-5 py-10"
+      className="setup-liquid relative isolate flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ink px-5 py-10"
       // La signature est la dernière ligne de la page : quand le formulaire de secours est ouvert
       // sur un petit téléphone, c'est elle qui touche le bas, et l'indicateur d'accueil la couvrait.
       style={{ paddingBottom: "max(2.5rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))" }}
     >
+      <LoginBackdrop />
       {/* Plein noir (10/10/2026) : la lueur violette en dégradé ne disait plus rien de l'application,
           dont l'accent n'est plus violet — le noir du cinéma suffit à la reconnaître. */}
       <div className="relative w-full max-w-sm">

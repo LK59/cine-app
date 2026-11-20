@@ -4217,6 +4217,22 @@
     },
     "loginLink": "Coming from the old address? Transfer code"
   },
+  "loginBackground": {
+    "title": "Sign-in screen",
+    "hint": "A background image for the sign-in page and the share code page. Without one, the screen stays black.",
+    "none": "No image: black background",
+    "previewAlt": "Sign-in screen preview",
+    "dim": "Dark overlay",
+    "choose": "Choose an image",
+    "replace": "Replace the image",
+    "remove": "Remove",
+    "limits": "JPEG, PNG or WebP, 9.5 MB at most. The image is visible without signing in: put nothing private in it.",
+    "saved": "Image saved",
+    "removed": "Image removed, the screen is black again",
+    "tooLarge": "Image too large (9.5 MB at most)",
+    "notImage": "This file is not a readable image (JPEG, PNG or WebP)",
+    "error": "Saving failed"
+  },
   "streamdeck": {
     "title": "Stream Deck",
     "hint": "One token per Stream Deck: it can only follow what is playing, nothing else. Enter it in the plugin with the address below.",
